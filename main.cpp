@@ -90,7 +90,7 @@ void walkdirs(const std::string& directory_path)
 class AuxiliaryIndex
 {
 private:
-	std::unordered_map<std::string, std::vector<std::pair<uint32_t, std::vector<uint32_t>>>> table_;
+	std::unordered_map<std::string, std::unordered_map<uint32_t, std::vector<uint32_t>>> table_;
 	size_t num_segments_;
 	std::shared_mutex segments_[num_segments_];
 	
@@ -114,12 +114,10 @@ public:
 	void Read(const std::string& term) 
 	{
 		size_t i = GetSegment(term);
+		
 		std::shared_lock<std::shared_mutex> _(segments_[i]);
 		
-		if ( table_.contains(term) )
-		{
-			table_
-		}
+		auto res = table_[term];
 		//TODO
 	}
 	
@@ -129,14 +127,7 @@ public:
 		
 		std::unique_lock<std::shared_mutex> _(segments_[i]);
 		
-		if ( table_.contains(term) )
-		{
-			table_[]
-		}
-		else
-		{
-			table_[term] = std::pair<uint32_t, std::vector<uint32_t>>;
-		}                                                                //TODO
+		table_[term][doc_id].push_back(term_position);
 	}
 }
 
