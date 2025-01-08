@@ -1,34 +1,27 @@
 #include <iostream>
 #include <regex>
 #include <fstream>
-
 #include <algorithm> 
 #include <cctype>
-//#include <unordered_map>
-//#include <thread>
-//#include <vector>
-//#include <utility>
-//#include <shared_mutex>
-//#include <mutex>
 
-//#include <tbb/concurrent_unordered_map.h>
+#include <filesystem>
 
-//#include <random>
+#include <unordered_map>
 
 
 
-void split()
+void split(const std::string& file_path)
 {
-	std::ifstream file("msg.txt");
+	std::ifstream file(file_path);
 	
 	if (!file)
 	{
 		std::cout << "Error opening file\n";
-		return 1;
+		return;
 	}
 	
 	std::string line;
-	std::regex word_regex("(\\w+)");//, std::regex::icase);
+	std::regex word_regex("(\\w+)");
 	
 	while ( std::getline(file, line) )
 	{
@@ -39,18 +32,55 @@ void split()
 		{
 			std::smatch match = *i;
 			std::string match_str = match.str();
+			
 			std::transform(match_str.begin(), match_str.end(), match_str.begin(),
 						   [](unsigned char c) { return std::tolower(c); });
-			std::cout << match_str << '\n';
+						   
+			std::cout << match_str << " "; //<< '\n';
 		}
+		std::cout << '\n';
 	}
 	
 	file.close();
 }
 
+
+namespace fs = std::filesystem;
+
+//std::string allowable_extensions[] = {".txt"} 
+
+void walkdirs(const std::string& directory_path)
+{
+	if (fs::exists(directory_path) && fs::is_directory(directory_path))
+	{
+		for (const auto& entry : fs::directory_iterator(directory_path))
+		{
+			if (entry.path().extension() == ".txt")
+			{
+				split(entry.path().string());//std::cout << entry.path() << std::endl;
+			}
+		}
+	}
+	else
+	{
+		std::cout << "directory does not exist or not a directory\n";
+	}
+}
+
+class AuxiliaryIndex
+{
+private:
+	std::unordered_map<std::string, std::pair<std::string, std::vector<uint64_t>>> table;
+	
+public:
+	
+}
+
 int main()
 {
-	split();
+	//split("msg.txt");
+	
+	walkdirs("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR");
 	
 	return 0;
 }
