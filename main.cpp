@@ -8,6 +8,12 @@
 
 #include <unordered_map>
 
+#include <cstdint> //for uint...
+
+#include <shared_mutex> //for class
+
+#include <functional> // For std::hash
+
 
 
 void split(const std::string& file_path)
@@ -67,23 +73,100 @@ void walkdirs(const std::string& directory_path)
 	}
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class AuxiliaryIndex
 {
 private:
-	std::unordered_map<std::string, std::pair<std::string, std::vector<uint64_t>>> table;
+	std::unordered_map<std::string, std::vector<std::pair<uint32_t, std::vector<uint32_t>>>> table_;
+	size_t num_segments_;
+	std::shared_mutex segments_[num_segments_];
 	
 public:
+	AuxiliaryIndex(size_t s)
+	{	
+		num_segments_ = s ? s : 1; //to make sure s is always > 0
+		
+		for (int i = 0; i < num_segments_; ++i)
+		{
+			shared_mutexes[i] = std::shared_mutex();
+		}
+	}
+
+	size_t GetSegment(const std::string& term) 
+	{
+		size_t hash_value = std::hash<std::string> {}(term);
+		return hash_value % num_segments_;
+	}
+
+	void Read(const std::string& term) 
+	{
+		size_t i = GetSegment(term);
+		std::shared_lock<std::shared_mutex> _(segments_[i]);
+		
+		if ( table_.contains(term) )
+		{
+			table_
+		}
+		//TODO
+	}
 	
+	void Write(const std::string& term, uint32_t doc_id, uint32_t term_position)
+	{
+		size_t i = GetSegment(term);
+		
+		std::unique_lock<std::shared_mutex> _(segments_[i]);
+		
+		if ( table_.contains(term) )
+		{
+			table_[]
+		}
+		else
+		{
+			table_[term] = std::pair<uint32_t, std::vector<uint32_t>>;
+		}                                                                //TODO
+	}
 }
 
 int main()
 {
-	//split("msg.txt");
 	
-	walkdirs("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR");
+	
+	
+	//split("msg.txt");
+	//walkdirs("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR");
 	
 	return 0;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /*
 
