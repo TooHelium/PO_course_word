@@ -21,7 +21,7 @@
 class AuxiliaryIndex
 {
 private:
-	std::unordered_map<std::string, std::unordered_map<uint32_t, std::vector<uint32_t>>> table_;
+	std::vector<std::unordered_map<std::string, std::unordered_map<uint32_t, std::vector<uint32_t>>>> table_;
 	size_t num_segments_;
 	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
 	
@@ -29,15 +29,17 @@ public:
 	AuxiliaryIndex(size_t s)
 	{	
 		num_segments_ = s ? s : 1; //to make sure s is always > 0
-		segments_.reserve(num_segments_); //add some try catch
 		
+		table_.resize(num_segments_); // +++
+		
+		segments_.reserve(num_segments_); //add some try catch
 		for (size_t i = 0; i < num_segments_; ++i)
 		{
 			segments_.emplace_back(std::make_unique<std::shared_mutex>());
 		}
 	}
 
-	size_t GetSegment(const std::string& term) 
+	size_t GetSegmentIndex(const std::string& term) 
 	{
 		size_t hash_value = std::hash<std::string> {}(term);
 		return hash_value % num_segments_;
@@ -45,12 +47,12 @@ public:
 
 	uint32_t Read(const std::string& term) 
 	{
-		size_t i = GetSegment(term);
+		size_t i = GetSegmentIndex(term);
 		
 		std::shared_lock<std::shared_mutex> _(*segments_[i]);
 		
-		auto it = table_.find(term);
-		if ( it == table_.end() ) //maybe go out mutex
+		auto it = table_[i].find(term);
+		if ( it == table_[i].end() ) //maybe go out mutex
 		{
 			return 0;
 			//return -1;
@@ -59,7 +61,7 @@ public:
 		uint32_t max_freq = 0;
 		uint32_t doc_id = 0;
 		
-		for (const auto& pair : table_[term])
+		for (const auto& pair : table_[i][term])
 		{
 			if (pair.second.size() > max_freq)
 			{
@@ -73,16 +75,19 @@ public:
 	
 	void Write(const std::string& term, uint32_t doc_id, uint32_t term_position)
 	{
-		size_t i = GetSegment(term);
+		size_t i = GetSegmentIndex(term);
 		
 		std::unique_lock<std::shared_mutex> _(*segments_[i]);
 		
-		table_[term][doc_id].push_back(term_position);
+		table_[i][term][doc_id].push_back(term_position);
 	}
 	
-	size_t size()
+	size_t SegmentSize(size_t i)
 	{
-		return table_.size();
+		if (i < table_.size())
+			return table_[i].size();
+		
+		return 0;
 	}
 };
 
@@ -171,7 +176,7 @@ int main()
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\5"
 	};
 	
-	AuxiliaryIndex ai_one(1);
+	AuxiliaryIndex ai_one(10);
 
 	walkdirs(dirs[0], ai_one);
 	walkdirs(dirs[1], ai_one);
@@ -180,11 +185,11 @@ int main()
 	walkdirs(dirs[4], ai_one);
 	
 	std::cout << ai_one.Read("windows11hplaptop") << std::endl;
-	std::cout << ai_one.size() << std::endl;
-	
+	for (size_t i = 0; i < 10; ++i)
+		std::cout << i << " " << ai_one.SegmentSize(i) << std::endl;
 
 	
-	AuxiliaryIndex ai_many(1);
+	AuxiliaryIndex ai_many(10);
 	std::thread writers[5];
 	
 	for (int i = 0; i < 5; ++i)
@@ -203,7 +208,8 @@ int main()
 	}
 	
 	std::cout << ai_many.Read("windows11hplaptop") << std::endl;
-	std::cout << ai_many.size() << std::endl;
+	for (size_t i = 0; i < 10; ++i)
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
 	
 	
 	
