@@ -14,8 +14,10 @@
 
 #include <functional> // For std::hash
 
+#include <mutex>
 
 
+/*
 void split(const std::string& file_path)
 {
 	std::ifstream file(file_path);
@@ -72,18 +74,7 @@ void walkdirs(const std::string& directory_path)
 		std::cout << "directory does not exist or not a directory\n";
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
+*/
 
 
 
@@ -92,16 +83,17 @@ class AuxiliaryIndex
 private:
 	std::unordered_map<std::string, std::unordered_map<uint32_t, std::vector<uint32_t>>> table_;
 	size_t num_segments_;
-	std::shared_mutex segments_[num_segments_];
+	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
 	
 public:
 	AuxiliaryIndex(size_t s)
 	{	
 		num_segments_ = s ? s : 1; //to make sure s is always > 0
+		segments_.reserve(num_segments_); //add some try catch
 		
-		for (int i = 0; i < num_segments_; ++i)
+		for (size_t i = 0; i < num_segments_; ++i)
 		{
-			shared_mutexes[i] = std::shared_mutex();
+			segments_.emplace_back(std::make_unique<std::shared_mutex>());
 		}
 	}
 
@@ -111,29 +103,47 @@ public:
 		return hash_value % num_segments_;
 	}
 
-	void Read(const std::string& term) 
+	uint32_t Read(const std::string& term) 
 	{
 		size_t i = GetSegment(term);
 		
-		std::shared_lock<std::shared_mutex> _(segments_[i]);
+		std::shared_lock<std::shared_mutex> _(*segments_[i]);
 		
-		auto res = table_[term];
-		//TODO
+		auto it = table_.find(term);
+		if ( it == table_.end() ) //maybe go out mutex
+		{
+			return -1;
+		}
+		
+		uint32_t max_freq = 0;
+		uint32_t doc_id = 0;
+		
+		for (const auto& pair : table_[term])
+		{
+			if (pair.second.size() > max_freq)
+			{
+				max_freq = pair.second.size();
+				doc_id = pair.first;
+			}
+		}
+		
+		return doc_id;
 	}
 	
 	void Write(const std::string& term, uint32_t doc_id, uint32_t term_position)
 	{
 		size_t i = GetSegment(term);
 		
-		std::unique_lock<std::shared_mutex> _(segments_[i]);
+		std::unique_lock<std::shared_mutex> _(*segments_[i]);
 		
 		table_[term][doc_id].push_back(term_position);
 	}
-}
+};
 
 int main()
 {
 	
+	AuxiliaryIndex ai(5);
 	
 	
 	//split("msg.txt");
