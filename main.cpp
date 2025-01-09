@@ -4,6 +4,8 @@
 #include <algorithm> 
 #include <cctype>
 
+#include <thread>
+
 #include <filesystem>
 
 #include <unordered_map>
@@ -15,68 +17,6 @@
 #include <functional> // For std::hash
 
 #include <mutex>
-
-
-/*
-void split(const std::string& file_path)
-{
-	std::ifstream file(file_path);
-	
-	if (!file)
-	{
-		std::cout << "Error opening file\n";
-		return;
-	}
-	
-	std::string line;
-	std::regex word_regex("(\\w+)");
-	
-	while ( std::getline(file, line) )
-	{
-		auto first_word = std::sregex_iterator(line.begin(), line.end(), word_regex);
-		auto last_word = std::sregex_iterator();
-		
-		for (std::sregex_iterator i = first_word; i != last_word; ++i)
-		{
-			std::smatch match = *i;
-			std::string match_str = match.str();
-			
-			std::transform(match_str.begin(), match_str.end(), match_str.begin(),
-						   [](unsigned char c) { return std::tolower(c); });
-						   
-			std::cout << match_str << " "; //<< '\n';
-		}
-		std::cout << '\n';
-	}
-	
-	file.close();
-}
-
-
-namespace fs = std::filesystem;
-
-//std::string allowable_extensions[] = {".txt"} 
-
-void walkdirs(const std::string& directory_path)
-{
-	if (fs::exists(directory_path) && fs::is_directory(directory_path))
-	{
-		for (const auto& entry : fs::directory_iterator(directory_path))
-		{
-			if (entry.path().extension() == ".txt")
-			{
-				split(entry.path().string());//std::cout << entry.path() << std::endl;
-			}
-		}
-	}
-	else
-	{
-		std::cout << "directory does not exist or not a directory\n";
-	}
-}
-*/
-
-
 
 class AuxiliaryIndex
 {
@@ -112,7 +52,8 @@ public:
 		auto it = table_.find(term);
 		if ( it == table_.end() ) //maybe go out mutex
 		{
-			return -1;
+			return 0;
+			//return -1;
 		}
 		
 		uint32_t max_freq = 0;
@@ -138,16 +79,149 @@ public:
 		
 		table_[term][doc_id].push_back(term_position);
 	}
+	
+	size_t size()
+	{
+		return table_.size();
+	}
 };
+
+void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
+{
+	std::ifstream file(file_path.string());
+	
+	if (!file)
+	{
+		std::cout << "Error opening file\n";
+		return;
+	}
+	
+	std::string filename = file_path.stem().string();
+	filename.erase(filename.size() - 2); // erasing '_i' part
+	uint32_t doc_id = static_cast<uint32_t>( std::stoul(filename) );
+	
+	// ATTENTION uint32_t doc_id = static_cast<uint32_t>( std::stoul(file_path.stem().string()) );
+	
+	uint32_t word_position = 1;
+	
+	std::string line;
+	std::regex word_regex("(\\w+)");
+	
+	while ( std::getline(file, line) )
+	{
+		auto first_word = std::sregex_iterator(line.begin(), line.end(), word_regex);
+		auto last_word = std::sregex_iterator();
+		
+		for (std::sregex_iterator i = first_word; i != last_word; ++i)
+		{
+			std::smatch match = *i;
+			std::string match_str = match.str();
+			
+			std::transform(match_str.begin(), match_str.end(), match_str.begin(),
+						   [](unsigned char c) { return std::tolower(c); });
+						   
+			ai.Write(match_str, doc_id, word_position++);
+			//std::cout << match_str << " " << doc_id << " " << word_position++ << std::endl;
+			//std::cout << match_str << " " << word_position++ << ", "; //<< '\n';
+		}
+		//std::cout << '\n';
+	}
+	
+	file.close();
+}
+
+
+namespace fs = std::filesystem;
+
+void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
+{
+	if (fs::exists(directory_path) && fs::is_directory(directory_path))
+	{
+		for (const auto& entry : fs::directory_iterator(directory_path))
+		{
+			if (entry.path().extension() == ".txt") //or maybe .html also
+			{
+				split(entry.path(), ai);
+			}
+		}
+	}
+	else
+	{
+		std::cout << "directory does not exist or not a directory\n";
+	}
+}
+
+
+void testIndex(AuxiliaryIndex& ai)
+{
+	std::string s = "somelonglonglongword";
+	for (int i = 0; i < 100000; ++i)
+		ai.Write(s+std::to_string(i), i, i);
+	
+	std::cout << ai.Read("somelonglonglongword99999") << std::endl;
+}
 
 int main()
 {
+	AuxiliaryIndex ai(10);
 	
-	AuxiliaryIndex ai(5);
+	std::string dirs[5] = {
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1",
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\2",
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\3",
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\4",
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\5"
+	};
+	
+	std::thread t4 = std::thread(walkdirs, dirs[4], std::ref(ai));
+	t4.join();
+	
+	std::thread t1 = std::thread(walkdirs, dirs[1], std::ref(ai));
+	t1.join();
+	
+	std::thread t0 = std::thread(walkdirs, dirs[0], std::ref(ai));
+	t0.join();
+	
+	std::thread t3 = std::thread(walkdirs, dirs[3], std::ref(ai));
+	t3.join();
+	
+	std::thread t2 = std::thread(walkdirs, dirs[2], std::ref(ai));
+	t2.join();
 	
 	
-	//split("msg.txt");
-	//walkdirs("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR");
+	
+	
+	
+	/*t0.join();
+	t1.join();
+	t2.join();
+	t3.join();
+	t4.join();*/
+	
+	std::cout << ai.Read("windows11hplaptop") << std::endl;
+	std::cout << ai.size() << std::endl;
+	
+	/*std::thread writers[5];
+	
+	for (int i = 0; i < 5; ++i)
+	{
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai));
+	}
+	
+	
+	//walkdirs("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1", ai);
+	
+	
+	
+	for (int i = 0; i < 5; ++i)
+	{
+		writers[i].join();
+	}
+	
+	std::cout << ai.Read("windows11hplaptop") << std::endl;
+	std::cout << ai.size() << std::endl;
+	*/
+	
 	
 	return 0;
 }
@@ -170,6 +244,46 @@ int main()
 
 
 /*
+std::string term = "windows11hplaptop";
+	
+	auto it = ai.table_.find(term);
+	if ( it == ai.table_.end() ) 
+	{
+		std::cout << "No match 111111111" << std::endl;
+	}
+	else
+	{
+		std::cout << "111111111" << std::endl;
+	}
+	
+	walkdirs("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\5", ai);
+	
+	it = ai.table_.find(term);
+	if ( it == ai.table_.end() ) 
+	{
+		std::cout << "No match 22222222" << std::endl;
+	}
+	else
+	{
+		std::cout << "222222222" << std::endl;
+		
+		for (auto const& pair : ai.table_[term])
+		{
+			std::cout << pair.first << " " << pair.second[0] << std::endl;
+		}
+	}
+	
+	std::cout << ai.table_.size() << std::endl;
+
+
+
+
+
+
+
+
+
+
 
 std::unordered_map<std::string, std::vector<std::pair<int,int>>> my_map;
 std::vector<std::shared_mutex> shared_mutexes;
