@@ -163,8 +163,6 @@ void testIndex(AuxiliaryIndex& ai)
 
 int main()
 {
-	AuxiliaryIndex ai(10);
-	
 	std::string dirs[5] = {
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1",
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\2",
@@ -173,39 +171,25 @@ int main()
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\5"
 	};
 	
-	std::thread t4 = std::thread(walkdirs, dirs[4], std::ref(ai));
-	t4.join();
+	AuxiliaryIndex ai_one(1);
+
+	walkdirs(dirs[0], ai_one);
+	walkdirs(dirs[1], ai_one);
+	walkdirs(dirs[2], ai_one);
+	walkdirs(dirs[3], ai_one);
+	walkdirs(dirs[4], ai_one);
 	
-	std::thread t1 = std::thread(walkdirs, dirs[1], std::ref(ai));
-	t1.join();
+	std::cout << ai_one.Read("windows11hplaptop") << std::endl;
+	std::cout << ai_one.size() << std::endl;
 	
-	std::thread t0 = std::thread(walkdirs, dirs[0], std::ref(ai));
-	t0.join();
+
 	
-	std::thread t3 = std::thread(walkdirs, dirs[3], std::ref(ai));
-	t3.join();
-	
-	std::thread t2 = std::thread(walkdirs, dirs[2], std::ref(ai));
-	t2.join();
-	
-	
-	
-	
-	
-	/*t0.join();
-	t1.join();
-	t2.join();
-	t3.join();
-	t4.join();*/
-	
-	std::cout << ai.Read("windows11hplaptop") << std::endl;
-	std::cout << ai.size() << std::endl;
-	
-	/*std::thread writers[5];
+	AuxiliaryIndex ai_many(1);
+	std::thread writers[5];
 	
 	for (int i = 0; i < 5; ++i)
 	{
-		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai));
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
 	}
 	
 	
@@ -218,9 +202,9 @@ int main()
 		writers[i].join();
 	}
 	
-	std::cout << ai.Read("windows11hplaptop") << std::endl;
-	std::cout << ai.size() << std::endl;
-	*/
+	std::cout << ai_many.Read("windows11hplaptop") << std::endl;
+	std::cout << ai_many.size() << std::endl;
+	
 	
 	
 	return 0;
