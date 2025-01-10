@@ -126,11 +126,21 @@ public:
 				{
 					file << term << ":";
 					
+					std::vector<uint32_t> doc_ids;
+					doc_ids.reserve( table_[i][term].size() );
+					
 					for (const auto& pair : table_[i][term])
 					{
-						file<<std::to_string(pair.first)<<"="<<std::to_string(pair.second.size());
+						doc_ids.push_back(pair.first);
+					}
+					
+					std::sort(doc_ids.begin(), doc_ids.end());
+					
+					for (const auto& doc_id : doc_ids)
+					{
+						file<<std::to_string(doc_id)<<"="<<std::to_string(table_[i][term][doc_id].size());
 						
-						for (const auto& pos : pair.second)
+						for (const auto& pos : table_[i][term][doc_id])
 						{
 							file << "," << std::to_string(pos);
 						}
@@ -139,11 +149,37 @@ public:
 					}
 					
 					file << std::endl;
-				}				
+				}
 			}
 			
 			file.close();
 		}
+	}
+	
+	void ReadFromDiskIndex(const std::string& term)
+	{
+		size_t i = GetSegmentIndex(term);
+		
+		std::string index_filename = merge_path_ + "\\m" + std::to_string(i) + ".txt"; //change path to main index
+			
+		std::ifstream file(index_filename);
+		
+		if (!file)
+		{
+			std::cout << "Error opening file (index) " << index_filename << std::endl;
+		}
+		else
+		{
+			std::string line;
+			std::regex term_regex("^" + term + ":");    // "\\w+(['-]\\w+)*");
+			
+			//while ( std::getline(file, line) )
+			//{
+				
+			//} TODO
+		}
+		
+		file.close(); //maybe after fault i do not need to close the file
 	}
 };
 
