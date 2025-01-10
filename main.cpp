@@ -25,6 +25,8 @@ private:
 	size_t num_segments_;
 	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
 	
+	std::string merge_path_ = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\merged index";
+	
 public:
 	AuxiliaryIndex(size_t s)
 	{	
@@ -89,6 +91,60 @@ public:
 		
 		return 0;
 	}
+	
+	void WriteToDisk()
+	{
+		for (size_t i = 0; i < num_segments_; ++i)
+		{
+			std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
+			
+			std::string merge_filename = merge_path_ + "\\m" + std::to_string(i) + ".txt"; 
+			
+			std::ofstream file(merge_filename);
+			
+			if (!file)
+			{
+				std::cerr << "Error opening " << merge_filename << std::endl;
+				//return; // VERY DANGEROUS
+			}
+			else
+			{
+				std::vector<std::string> keys;
+				keys.reserve( table_[i].size() );
+				
+				for (const auto& pair : table_[i])
+				{
+					keys.push_back(pair.first);
+				}
+				
+				std::sort(keys.begin(), keys.end());
+				
+				//now write to merge file
+				//term1:doc_id1=freaq,pos1,pos2,pos3,...,posn;doc_id2=...;
+				//term2:doc_id1=...;
+				for (const auto& term : keys)
+				{
+					file << term << ":";
+					
+					for (const auto& pair : table_[i][term])
+					{
+						file<<std::to_string(pair.first)<<"="<<std::to_string(pair.second.size());
+						
+						for (const auto& pos : pair.second)
+						{
+							file << "," << std::to_string(pos);
+						}
+						
+						file << ";";
+					}
+					
+					file << std::endl;
+				}				
+			}
+			
+			file.close();
+		}
+	}
 };
 
 void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
@@ -110,7 +166,7 @@ void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
 	uint32_t word_position = 1;
 	
 	std::string line;
-	std::regex word_regex("(\\w+)");
+	std::regex word_regex("\\w+(['-]\\w+)*");
 	
 	while ( std::getline(file, line) )
 	{
@@ -176,6 +232,52 @@ int main()
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\5"
 	};
 	
+	AuxiliaryIndex ai_many(10);
+	
+	std::thread writers[5];
+	for (int i = 0; i < 5; ++i)
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
+	
+	for (int i = 0; i < 5; ++i)
+		writers[i].join();
+	
+	std::cout << ai_many.Read("windows11hplaptop") << std::endl;
+	for (size_t i = 0; i < 10; ++i)
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+	
+	std::cout << "Writing to disk..." << std::endl;
+	
+	ai_many.WriteToDisk();
+	
+	return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+std::string dirs[5] = {
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1",
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\2",
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\3",
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\4",
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\5"
+	};
+	
 	AuxiliaryIndex ai_one(10);
 
 	walkdirs(dirs[0], ai_one);
@@ -210,60 +312,6 @@ int main()
 	std::cout << ai_many.Read("windows11hplaptop") << std::endl;
 	for (size_t i = 0; i < 10; ++i)
 		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
-	
-	
-	
-	return 0;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-std::string term = "windows11hplaptop";
-	
-	auto it = ai.table_.find(term);
-	if ( it == ai.table_.end() ) 
-	{
-		std::cout << "No match 111111111" << std::endl;
-	}
-	else
-	{
-		std::cout << "111111111" << std::endl;
-	}
-	
-	walkdirs("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\5", ai);
-	
-	it = ai.table_.find(term);
-	if ( it == ai.table_.end() ) 
-	{
-		std::cout << "No match 22222222" << std::endl;
-	}
-	else
-	{
-		std::cout << "222222222" << std::endl;
-		
-		for (auto const& pair : ai.table_[term])
-		{
-			std::cout << pair.first << " " << pair.second[0] << std::endl;
-		}
-	}
-	
-	std::cout << ai.table_.size() << std::endl;
 
 
 
