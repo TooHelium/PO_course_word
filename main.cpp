@@ -25,7 +25,24 @@
 class AuxiliaryIndex
 {
 private:
-	std::vector<std::unordered_map<std::string, std::unordered_map<uint32_t, std::vector<uint32_t>>>> table_;
+	using TermType = std::string;
+	using DocIdType = uint32_t;
+	using PosType = uint32_t;
+	using FreqType = size_t;
+	
+	using FreqDocIdPair = std::pair<FreqType, DocIdType>;
+	using DecrFreqStat = std::vector<FreqDocIdPair>;//, std::greater<FreqDocIdPair>>;
+	
+	using TermInfo = std::pair< 
+								DecrFreqStat, 
+								std::unordered_map<DocIdType, std::vector<PosType>>
+							  >;
+	
+	using TermsTable = std::unordered_map<TermType, TermInfo>;
+	
+	std::vector<TermsTable> table_;
+				 
+				 
 	size_t num_segments_;
 	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
 	
@@ -47,13 +64,13 @@ public:
 		}
 	}
 
-	size_t GetSegmentIndex(const std::string& term) 
+	size_t GetSegmentIndex(const TermType& term) 
 	{
 		size_t hash_value = std::hash<std::string> {}(term);
 		return hash_value % num_segments_;
 	}
 
-	uint32_t Read(const std::string& term) 
+	DocIdType Read(const TermType& term) 
 	{
 		size_t i = GetSegmentIndex(term);
 		
@@ -61,33 +78,37 @@ public:
 		
 		auto it = table_[i].find(term);
 		if ( it == table_[i].end() ) //maybe go out mutex
-		{
 			return 0;
-			//return -1;
-		}
 		
-		uint32_t max_freq = 0;
-		uint32_t doc_id = 0;
-		
-		for (const auto& pair : table_[i][term])
-		{
-			if (pair.second.size() > max_freq)
-			{
-				max_freq = pair.second.size();
-				doc_id = pair.first;
-			}
-		}
-		
-		return doc_id;
+		return table_[i][term].first[0].second;
 	}
 	
-	void Write(const std::string& term, uint32_t doc_id, uint32_t term_position)
+	void Write(const TermType& term, DocIdType doc_id, PosType term_position)
 	{
 		size_t i = GetSegmentIndex(term);
 		
 		std::unique_lock<std::shared_mutex> _(*segments_[i]);
 		
-		table_[i][term][doc_id].push_back(term_position);
+		//table_[i][term].second[doc_id].push_back(term_position); //
+		auto& positions = table_[i][term].second[doc_id]; //auto can be changed !!!!!!!!!!!!! i know type
+		positions.push_back(term_position);
+		
+		auto& stat = table_[i][term].first;
+		//UpdateDecrFreqStat
+		if (stat.size() < num_top_doc_ids_ 
+		    || positions.size() > stat.back().first) //5 4 3 chech on empty
+		{
+			auto it = std::lower_bound(stat.begin(), stat.end(), 
+									   FreqDocIdPair{positions.size(), doc_id}, 
+									   [](const FreqDocIdPair& l, const FreqDocIdPair& r){
+										   return l.first > r.first;
+									   });
+									  
+			stat.insert(it, {positions.size(), doc_id});
+			
+			if (stat.size() > num_top_doc_ids_)
+				stat.pop_back();
+		}
 	}
 	
 	size_t SegmentSize(size_t i)
@@ -172,7 +193,7 @@ public:
 		}
 	}
 	
-	void ReadFromDiskIndex(const std::string& term)
+/*	void ReadFromDiskIndex(const std::string& term) //TODO
 	{
 		size_t i = GetSegmentIndex(term);
 		
@@ -197,6 +218,7 @@ public:
 		
 		file.close(); //maybe after fault i do not need to close the file
 	}
+*/
 };
 
 void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
@@ -265,15 +287,6 @@ void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
 }
 
 
-void testIndex(AuxiliaryIndex& ai)
-{
-	std::string s = "somelonglonglongword";
-	for (int i = 0; i < 100000; ++i)
-		ai.Write(s+std::to_string(i), i, i);
-	
-	std::cout << ai.Read("somelonglonglongword99999") << std::endl;
-}
-
 int main()
 {
 	std::string dirs[5] = {
@@ -299,7 +312,7 @@ int main()
 	
 	std::cout << "Writing to disk..." << std::endl;
 	
-	ai_many.WriteToDisk();
+	//ai_many.WriteToDisk();
 	
 	return 0;
 }
