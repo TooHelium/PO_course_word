@@ -89,14 +89,13 @@ public:
 		
 		std::unique_lock<std::shared_mutex> _(*segments_[i]);
 		
-		//table_[i][term].second[doc_id].push_back(term_position); //
 		auto& positions = table_[i][term].second[doc_id]; //auto can be changed !!!!!!!!!!!!! i know type
 		positions.push_back(term_position);
 		
 		auto& stat = table_[i][term].first;
 		//UpdateDecrFreqStat
 		if (stat.size() < num_top_doc_ids_ 
-		    || positions.size() > stat.back().first) //5 4 3 chech on empty
+		    || positions.size() > stat.back().first)
 		{
 			auto it = std::lower_bound(stat.begin(), stat.end(), 
 									   FreqDocIdPair{positions.size(), doc_id}, 
@@ -105,6 +104,8 @@ public:
 									   });
 									  
 			stat.insert(it, {positions.size(), doc_id});
+			
+			
 			
 			if (stat.size() > num_top_doc_ids_)
 				stat.pop_back();
@@ -136,7 +137,7 @@ public:
 			}
 			else
 			{
-				std::vector<std::string> keys;
+				std::vector<TermType> keys;
 				keys.reserve( table_[i].size() );
 				
 				for (const auto& pair : table_[i])
@@ -150,37 +151,27 @@ public:
 				//term1:doc_id1=freaq,pos1,pos2,pos3,...,posn;doc_id2=...;
 				for (const auto& term : keys)
 				{
-					file << term << ":";
+					file << term << ":" << "["; //i think can be combined
 					
-					std::vector<uint32_t> doc_ids;
-					doc_ids.reserve( table_[i][term].size() );
-					
-					std::multiset<std::pair<size_t, uint32_t>, std::greater<std::pair<size_t, uint32_t>>> most_freq_doc_ids;
-					
-					for (const auto& pair : table_[i][term])
-					{
-						doc_ids.push_back(pair.first);
-						
-						most_freq_doc_ids.insert( {pair.second.size(), pair.first} ); //maybe swap with inner if .top()
-						if (most_freq_doc_ids.size() > num_top_doc_ids_)
-							most_freq_doc_ids.erase( --most_freq_doc_ids.end() );
-					}
-					
-					std::sort(doc_ids.begin(), doc_ids.end());
-					
-					file << "[";
-					for (const auto& freq_id : most_freq_doc_ids)
-						file << std::to_string(freq_id.second) << ","; //the last coma is inaviTable
+					for (const auto& pair : table_[i][term].first)
+						file << std::to_string(pair.second) << ","; //the last coma is inaviTable
 					file << "]";
 					
+					
+					std::vector<DocIdType> doc_ids;
+					doc_ids.reserve( table_[i][term].second.size() );
+					for (const auto& pair : table_[i][term].second)
+					{
+						doc_ids.push_back(pair.first);
+					}
+					std::sort(doc_ids.begin(), doc_ids.end());
+						
 					for (const auto& doc_id : doc_ids)
 					{
-						file<<std::to_string(doc_id)<<"="<<std::to_string(table_[i][term][doc_id].size());
+						file << std::to_string(doc_id) << "=";
 						
-						for (const auto& pos : table_[i][term][doc_id])
-						{
-							file << "," << std::to_string(pos);
-						}
+						for (const auto& pos : table_[i][term].second[doc_id])
+							file << std::to_string(pos) << ",";
 						
 						file << ";";
 					}
@@ -299,11 +290,12 @@ int main()
 	
 	AuxiliaryIndex ai_many(10);
 	
-	std::thread writers[5];
-	for (int i = 0; i < 5; ++i)
+	int t = 5;
+	std::thread writers[t];
+	for (int i = 0; i < t; ++i)
 		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
 	
-	for (int i = 0; i < 5; ++i)
+	for (int i = 0; i < t; ++i)
 		writers[i].join();
 	
 	std::cout << ai_many.Read("windows11hplaptop") << std::endl;
@@ -312,7 +304,7 @@ int main()
 	
 	std::cout << "Writing to disk..." << std::endl;
 	
-	//ai_many.WriteToDisk();
+	ai_many.WriteToDisk();
 	
 	return 0;
 }
