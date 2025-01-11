@@ -18,6 +18,8 @@
 
 #include <mutex>
 
+#include <queue>
+
 class AuxiliaryIndex
 {
 private:
@@ -26,6 +28,8 @@ private:
 	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
 	
 	std::string merge_path_ = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\merged index";
+	
+	size_t num_top_doc_ids_ = 5;
 	
 public:
 	AuxiliaryIndex(size_t s)
@@ -129,12 +133,38 @@ public:
 					std::vector<uint32_t> doc_ids;
 					doc_ids.reserve( table_[i][term].size() );
 					
+					////////////////////////
+					auto cmp = [](const std::pair<uint32_t, size_t>& l, const std::pair<uint32_t, size_t>& r){
+						return l.second > r.second; //compare by frequency
+					};
+					std::priority_queue<std::pair<uint32_t, size_t>, std::vector<std::pair<uint32_t, size_t>>, decltype(cmp)> most_freq_doc_ids(cmp);
+					//most_freq_doc_ids.reserve( num_top_doc_ids_ );
+					
 					for (const auto& pair : table_[i][term])
 					{
 						doc_ids.push_back(pair.first);
+						
+						most_freq_doc_ids.push( {pair.first, pair.second.size()} ); //maybe swap with inner if .top()
+						if (most_freq_doc_ids.size() > num_top_doc_ids_)
+							most_freq_doc_ids.pop();
 					}
 					
 					std::sort(doc_ids.begin(), doc_ids.end());
+					
+					//printing  most_freq_doc_ids in [] maybe change the collection
+					std::vector<uint32_t> mfdi;
+					while ( !most_freq_doc_ids.empty() )
+					{
+						mfdi.push_back(most_freq_doc_ids.top().first);
+						most_freq_doc_ids.pop();
+					}
+					std::sort(mfdi.begin(), mfdi.end(), std::greater<uint32_t>());
+					/// very uneficient !!!!!!!!!!!!!
+					
+					file<<"[";
+					for (const auto& v : mfdi)
+						file<<std::to_string(v)<<","; //the last coma is 
+					file<<"]";
 					
 					for (const auto& doc_id : doc_ids)
 					{
