@@ -31,7 +31,7 @@ private:
 	using FreqType = size_t;
 	
 	using FreqDocIdPair = std::pair<FreqType, DocIdType>;
-	using DecrFreqStat = std::vector<FreqDocIdPair>;//, std::greater<FreqDocIdPair>>;
+	using DecrFreqStat = std::vector<FreqDocIdPair>;
 	
 	using TermInfo = std::pair< 
 								DecrFreqStat, 
@@ -66,7 +66,7 @@ public:
 
 	size_t GetSegmentIndex(const TermType& term) 
 	{
-		size_t hash_value = std::hash<std::string> {}(term);
+		size_t hash_value = std::hash<TermType> {}(term);
 		return hash_value % num_segments_;
 	}
 
@@ -104,8 +104,6 @@ public:
 									   });
 									  
 			stat.insert(it, {positions.size(), doc_id});
-			
-			
 			
 			if (stat.size() > num_top_doc_ids_)
 				stat.pop_back();
@@ -290,6 +288,11 @@ int main()
 	
 	AuxiliaryIndex ai_many(10);
 	
+	/*walkdirs(dirs[0], ai_many);
+	walkdirs(dirs[1], ai_many);
+	walkdirs(dirs[2], ai_many);
+	walkdirs(dirs[3], ai_many);
+	walkdirs(dirs[4], ai_many);*/
 	int t = 5;
 	std::thread writers[t];
 	for (int i = 0; i < t; ++i)
@@ -298,10 +301,13 @@ int main()
 	for (int i = 0; i < t; ++i)
 		writers[i].join();
 	
-	std::cout << ai_many.Read("windows11hplaptop") << std::endl;
-	for (size_t i = 0; i < 10; ++i)
+	size_t total = 0;
+	//std::cout << ai_many.Read("windows11hplaptop") << std::endl;
+	for (size_t i = 0; i < 10; ++i){
 		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
-	
+		total += ai_many.SegmentSize(i);
+	}
+	std::cout << "Total :" << total << std::endl;
 	std::cout << "Writing to disk..." << std::endl;
 	
 	ai_many.WriteToDisk();
