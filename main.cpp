@@ -42,7 +42,7 @@ private:
 	
 	std::vector<TermsTable> table_;
 				 
-				 
+
 	size_t num_segments_;
 	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
 	
@@ -95,9 +95,27 @@ public:
 		auto& stat = table_[i][term].first;
 		//UpdateDecrFreqStat
 		if (stat.size() < num_top_doc_ids_ 
-		    || positions.size() > stat.back().first)
+		    || positions.size() > stat.back().first) //when we delete we need this algorithm too !!!!!!!
 		{
-			auto it = std::lower_bound(stat.begin(), stat.end(), 
+			auto curr = FreqDocIdPair{positions.size(), doc_id};
+
+			auto it = std::find_if(stat.begin(), stat.end(), 
+								   [&curr](const FreqDocIdPair& pair) { return pair.second == curr.second; });
+
+			if (it != stat.end()) 
+				it->first = curr.first;
+			else 
+				stat.push_back(curr);
+
+			std::sort(stat.begin(), stat.end(), 
+							 [](const FreqDocIdPair& l, const FreqDocIdPair& r) {
+								 return l.first > r.first;
+							 });
+							 
+			if (stat.size() > num_top_doc_ids_) //[10,164,18,71,67,]
+				stat.pop_back(); //I NEED NlogN each time !!!!!!!!!!!!!!!!!!!
+
+			/*auto it = std::lower_bound(stat.begin(), stat.end(), 
 									   FreqDocIdPair{positions.size(), doc_id}, 
 									   [](const FreqDocIdPair& l, const FreqDocIdPair& r){
 										   return l.first > r.first;
@@ -106,7 +124,7 @@ public:
 			stat.insert(it, {positions.size(), doc_id});
 			
 			if (stat.size() > num_top_doc_ids_)
-				stat.pop_back();
+				stat.pop_back();*/
 		}
 	}
 	
