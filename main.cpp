@@ -18,9 +18,11 @@
 
 #include <mutex>
 
-#include <queue>
+//#include <queue>
 
 #include <set>
+
+#include <atomic>
 
 class AuxiliaryIndex
 {
@@ -93,7 +95,7 @@ public:
 		return table_[i][term].desc_freq_ranking[0].doc_id;
 	}
 	
-	void Write(const TermType& term, DocIdType doc_id, PosType term_position)
+	void Write(const TermType& term, const DocIdType& doc_id, const PosType& term_position)
 	{
 		size_t i = GetSegmentIndex(term);
 		
@@ -201,7 +203,7 @@ public:
 		}
 	}
 	
-/*	void ReadFromDiskIndex(const std::string& term) //TODO
+	DocIdType ReadFromDiskIndex(const std::string& term) //TODO
 	{
 		size_t i = GetSegmentIndex(term);
 		
@@ -216,18 +218,37 @@ public:
 		else
 		{
 			std::string line;
-			std::regex term_regex("^" + term + ":");    // "\\w+(['-]\\w+)*");
+			std::regex term_regex("^" + term + ":\\[([0-9,]+)\\]");
+			std::smatch match;
 			
-			//while ( std::getline(file, line) )
-			//{
-				
-			//} TODO
+			while (std::getline(file, line))
+			{
+				if (std::regex_search(line, match, term_regex)) 
+				{
+					std::string nums = match[1].str();
+					std::regex num_regex("[0-9]+");
+		
+					std::vector<DocIdType> res_doc_ids;
+					res_doc_ids.reserve(num_top_doc_ids_); //maybe use separate variable for this?
+
+					auto first_num = std::sregex_iterator(nums.begin(), nums.end(), num_regex);
+					auto last_num = std::sregex_iterator();
+
+					for (std::sregex_iterator ri = first_num; ri != last_num; ++ri)
+						res_doc_ids.push_back(static_cast<DocIdType>( std::stoul(ri->str())));
+
+					return res_doc_ids[0]; //!!!! NOW I ONLY RETURN TOP 1 element
+				}
+			}
 		}
 		
-		file.close(); //maybe after fault i do not need to close the file
+		file.close(); //maybe delete?
+		
+		return 0; //of DocIdType
 	}
-*/
 };
+
+//std::atomic<size_t> D{0};
 
 void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
 {
@@ -247,7 +268,7 @@ void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
 	
 	std::string line;
 	std::regex word_regex("\\w+(['-]\\w+)*");
-	
+
 	while ( std::getline(file, line) )
 	{
 		auto first_word = std::sregex_iterator(line.begin(), line.end(), word_regex);
@@ -260,9 +281,6 @@ void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
 			
 			std::transform(match_str.begin(), match_str.end(), match_str.begin(), 
 						   [](unsigned char c) { return std::tolower(c); }); 
-			
-			//if (match_str == "and")//delete
-			//	std::cout << match_str << " " << doc_id << " " << word_position << std::endl;//delete
 			
 			ai.Write(match_str, doc_id, word_position++);
 		}
@@ -295,22 +313,31 @@ void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
 
 int main()
 {
-	std::string dirs[4] = {
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\3",
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\4",
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\2",
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1"
-	};
-	
 	size_t num_of_segments = 10;          
 	
 	AuxiliaryIndex ai_many(num_of_segments);
 	
-	/*walkdirs(dirs[0], ai_many);
+	
+	std::cout << ai_many.ReadFromDiskIndex("and") << std::endl; //10 4
+	std::cout << ai_many.ReadFromDiskIndex("south") << std::endl; //238 4
+	std::cout << ai_many.ReadFromDiskIndex("text") << std::endl; //94 8
+	
+	
+	/*
+	std::string dirs[4] = {
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1", //2 3 4 1
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\2",
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\3",
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\4"
+	};
+	
+	walkdirs(dirs[0], ai_many);
 	walkdirs(dirs[1], ai_many);
 	walkdirs(dirs[2], ai_many);
 	walkdirs(dirs[3], ai_many);
-	walkdirs(dirs[4], ai_many);*/
+	*/
+	
+	/*
 	int t = 4;
 	std::thread writers[t];
 	for (int i = 0; i < t; ++i)
@@ -318,14 +345,18 @@ int main()
 	
 	for (int i = 0; i < t; ++i)
 		writers[i].join();
+	*/
 	
+	/*
 	size_t total = 0;
-	//std::cout << ai_many.Read("windows11hplaptop") << std::endl;
+	std::cout << ai_many.Read("soft-core") << std::endl;
 	for (size_t i = 0; i < num_of_segments; ++i){
 		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
 		total += ai_many.SegmentSize(i);
 	}
 	std::cout << "Total :" << total << std::endl;
+	*/
+	
 	//std::cout << "Writing to disk..." << std::endl;
 	
 	//ai_many.WriteToDisk();
