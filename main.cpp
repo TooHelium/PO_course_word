@@ -30,13 +30,23 @@ private:
 	using PosType = uint32_t;
 	using FreqType = size_t;
 	
-	using FreqDocIdPair = std::pair<FreqType, DocIdType>;
-	using DecrFreqStat = std::vector<FreqDocIdPair>;
+	struct DocFreqEntry
+	{
+		DocIdType doc_id = 0;
+		FreqType freq = 0;
+	};
+	//using FreqDocIdPair = std::pair<FreqType, DocIdType>;
+	using DescFreqRanking = std::vector<DocFreqEntry>;
 	
-	using TermInfo = std::pair< 
-								DecrFreqStat, 
-								std::unordered_map<DocIdType, std::vector<PosType>>
-							  >;
+	struct TermInfo
+	{
+		DescFreqRanking desc_freq_ranking; //decr_freq_ranking
+		std::unordered_map<DocIdType, std::vector<PosType>> doc_pos_map; //maybe add some initialization
+	};
+	//using TermInfo = std::pair< 
+	//							DecrFreqStat, 
+	//							std::unordered_map<DocIdType, std::vector<PosType>>
+	//						  >;
 	
 	using TermsTable = std::unordered_map<TermType, TermInfo>;
 	
@@ -80,7 +90,7 @@ public:
 		if ( it == table_[i].end() ) //maybe go out mutex
 			return 0;
 		
-		return table_[i][term].first[0].second;
+		return table_[i][term].desc_freq_ranking[0].doc_id;
 	}
 	
 	void Write(const TermType& term, DocIdType doc_id, PosType term_position)
@@ -89,31 +99,31 @@ public:
 		
 		std::unique_lock<std::shared_mutex> _(*segments_[i]);
 		
-		auto& positions = table_[i][term].second[doc_id]; //auto can be changed !!!!!!!!!!!!! i know type
+		auto& positions = table_[i][term].doc_pos_map[doc_id]; //auto can be changed !!!!!!!!!!!!! i know type
 		positions.push_back(term_position);
 		
-		auto& stat = table_[i][term].first;
+		auto& ranking = table_[i][term].desc_freq_ranking;
 		//UpdateDecrFreqStat
-		if (stat.size() < num_top_doc_ids_ 
-		    || positions.size() > stat.back().first) //when we delete we need this algorithm too !!!!!!!
+		if (ranking.size() < num_top_doc_ids_ 
+		    || positions.size() > ranking.back().freq) //when we delete we need this algorithm too !!!!!!!
 		{
-			auto curr = FreqDocIdPair{positions.size(), doc_id};
+			auto curr = DocFreqEntry{doc_id, positions.size()};
 
-			auto it = std::find_if(stat.begin(), stat.end(), 
-								   [&curr](const FreqDocIdPair& pair) { return pair.second == curr.second; });
+			auto it = std::find_if(ranking.begin(), ranking.end(), 
+								   [&curr](const DocFreqEntry& entry) { return entry.doc_id == curr.doc_id; });
 
-			if (it != stat.end()) 
-				it->first = curr.first;
+			if (it != ranking.end()) 
+				it->freq = curr.freq;
 			else 
-				stat.push_back(curr);
+				ranking.push_back(curr);
 
-			std::sort(stat.begin(), stat.end(), 
-							 [](const FreqDocIdPair& l, const FreqDocIdPair& r) {
-								 return l.first > r.first;
+			std::sort(ranking.begin(), ranking.end(), 
+							 [](const DocFreqEntry& l, const DocFreqEntry& r) {
+								 return l.freq > r.freq;
 							 });
 							 
-			if (stat.size() > num_top_doc_ids_) //[10,164,18,71,67,]
-				stat.pop_back(); //I NEED NlogN each time !!!!!!!!!!!!!!!!!!!
+			if (ranking.size() > num_top_doc_ids_) //[10,164,18,71,67,]
+				ranking.pop_back(); //I NEED NlogN each time !!!!!!!!!!!!!!!!!!!
 
 			/*auto it = std::lower_bound(stat.begin(), stat.end(), 
 									   FreqDocIdPair{positions.size(), doc_id}, 
@@ -153,30 +163,30 @@ public:
 			}
 			else
 			{
-				std::vector<TermType> keys;
-				keys.reserve( table_[i].size() );
+				std::vector<TermType> terms;
+				terms.reserve( table_[i].size() );
 				
 				for (const auto& pair : table_[i])
 				{
-					keys.push_back(pair.first);
+					terms.push_back(pair.first);
 				}
 				
-				std::sort(keys.begin(), keys.end());
+				std::sort(terms.begin(), terms.end());
 				
 				//now write to merge file
 				//term1:doc_id1=freaq,pos1,pos2,pos3,...,posn;doc_id2=...;
-				for (const auto& term : keys)
+				for (const auto& term : terms)
 				{
 					file << term << ":" << "["; //i think can be combined
 					
-					for (const auto& pair : table_[i][term].first)
-						file << std::to_string(pair.second) << ","; //the last coma is inaviTable
+					for (const auto& entry : table_[i][term].desc_freq_ranking)
+						file << std::to_string(entry.doc_id) << ","; //the last coma is inaviTable
 					file << "]";
 					
 					
 					std::vector<DocIdType> doc_ids;
-					doc_ids.reserve( table_[i][term].second.size() );
-					for (const auto& pair : table_[i][term].second)
+					doc_ids.reserve( table_[i][term].doc_pos_map.size() );
+					for (const auto& pair : table_[i][term].doc_pos_map)
 					{
 						doc_ids.push_back(pair.first);
 					}
@@ -186,7 +196,7 @@ public:
 					{
 						file << std::to_string(doc_id) << "=";
 						
-						for (const auto& pos : table_[i][term].second[doc_id])
+						for (const auto& pos : table_[i][term].doc_pos_map[doc_id])
 							file << std::to_string(pos) << ",";
 						
 						file << ";";
