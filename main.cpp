@@ -99,15 +99,17 @@ public:
 		
 		std::unique_lock<std::shared_mutex> _(*segments_[i]);
 		
-		auto& positions = table_[i][term].doc_pos_map[doc_id]; //auto can be changed !!!!!!!!!!!!! i know type
+		std::vector<PosType>& positions = table_[i][term].doc_pos_map[doc_id];
 		positions.push_back(term_position);
 		
-		auto& ranking = table_[i][term].desc_freq_ranking;
-		//UpdateDecrFreqStat
+		std::vector<DocFreqEntry>& ranking = table_[i][term].desc_freq_ranking;
+		//UpdateDecrFreqStat NOW
 		if (ranking.size() < num_top_doc_ids_ 
 		    || positions.size() > ranking.back().freq) //when we delete we need this algorithm too !!!!!!!
 		{
-			auto curr = DocFreqEntry{doc_id, positions.size()};
+			DocFreqEntry curr;//auto curr = DocFreqEntry{doc_id, positions.size()};
+			curr.doc_id = doc_id;
+			curr.freq = positions.size();
 
 			auto it = std::find_if(ranking.begin(), ranking.end(), 
 								   [&curr](const DocFreqEntry& entry) { return entry.doc_id == curr.doc_id; });
@@ -123,18 +125,7 @@ public:
 							 });
 							 
 			if (ranking.size() > num_top_doc_ids_) //[10,164,18,71,67,]
-				ranking.pop_back(); //I NEED NlogN each time !!!!!!!!!!!!!!!!!!!
-
-			/*auto it = std::lower_bound(stat.begin(), stat.end(), 
-									   FreqDocIdPair{positions.size(), doc_id}, 
-									   [](const FreqDocIdPair& l, const FreqDocIdPair& r){
-										   return l.first > r.first;
-									   });
-									  
-			stat.insert(it, {positions.size(), doc_id});
-			
-			if (stat.size() > num_top_doc_ids_)
-				stat.pop_back();*/
+				ranking.pop_back(); 
 		}
 	}
 	
@@ -175,11 +166,11 @@ public:
 				
 				//now write to merge file
 				//term1:doc_id1=freaq,pos1,pos2,pos3,...,posn;doc_id2=...;
-				for (const auto& term : terms)
+				for (const TermType& term : terms)
 				{
 					file << term << ":" << "["; //i think can be combined
 					
-					for (const auto& entry : table_[i][term].desc_freq_ranking)
+					for (const DocFreqEntry& entry : table_[i][term].desc_freq_ranking)
 						file << std::to_string(entry.doc_id) << ","; //the last coma is inaviTable
 					file << "]";
 					
@@ -192,11 +183,11 @@ public:
 					}
 					std::sort(doc_ids.begin(), doc_ids.end());
 						
-					for (const auto& doc_id : doc_ids)
+					for (const DocIdType& doc_id : doc_ids)
 					{
 						file << std::to_string(doc_id) << "=";
 						
-						for (const auto& pos : table_[i][term].doc_pos_map[doc_id])
+						for (const PosType& pos : table_[i][term].doc_pos_map[doc_id])
 							file << std::to_string(pos) << ",";
 						
 						file << ";";
@@ -251,9 +242,7 @@ void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
 	std::string filename = file_path.stem().string();
 	filename.erase(filename.size() - 2); // erasing '_i' part
 	uint32_t doc_id = static_cast<uint32_t>( std::stoul(filename) );
-	
-	// ATTENTION uint32_t doc_id = static_cast<uint32_t>( std::stoul(file_path.stem().string()) );
-	
+		
 	uint32_t word_position = 1;
 	
 	std::string line;
@@ -269,14 +258,14 @@ void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
 			std::smatch match = *i;
 			std::string match_str = match.str();
 			
-			std::transform(match_str.begin(), match_str.end(), match_str.begin(),
-						   [](unsigned char c) { return std::tolower(c); });
-						   
+			std::transform(match_str.begin(), match_str.end(), match_str.begin(), 
+						   [](unsigned char c) { return std::tolower(c); }); 
+			
+			//if (match_str == "and")//delete
+			//	std::cout << match_str << " " << doc_id << " " << word_position << std::endl;//delete
+			
 			ai.Write(match_str, doc_id, word_position++);
-			//std::cout << match_str << " " << doc_id << " " << word_position++ << std::endl;
-			//std::cout << match_str << " " << word_position++ << ", "; //<< '\n';
 		}
-		//std::cout << '\n';
 	}
 	
 	file.close();
@@ -306,22 +295,23 @@ void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
 
 int main()
 {
-	std::string dirs[5] = {
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1",
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\2",
+	std::string dirs[4] = {
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\3",
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\4",
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\5"
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\2",
+		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1"
 	};
 	
-	AuxiliaryIndex ai_many(10);
+	size_t num_of_segments = 10;          
+	
+	AuxiliaryIndex ai_many(num_of_segments);
 	
 	/*walkdirs(dirs[0], ai_many);
 	walkdirs(dirs[1], ai_many);
 	walkdirs(dirs[2], ai_many);
 	walkdirs(dirs[3], ai_many);
 	walkdirs(dirs[4], ai_many);*/
-	int t = 5;
+	int t = 4;
 	std::thread writers[t];
 	for (int i = 0; i < t; ++i)
 		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
@@ -331,14 +321,14 @@ int main()
 	
 	size_t total = 0;
 	//std::cout << ai_many.Read("windows11hplaptop") << std::endl;
-	for (size_t i = 0; i < 10; ++i){
+	for (size_t i = 0; i < num_of_segments; ++i){
 		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
 		total += ai_many.SegmentSize(i);
 	}
 	std::cout << "Total :" << total << std::endl;
-	std::cout << "Writing to disk..." << std::endl;
+	//std::cout << "Writing to disk..." << std::endl;
 	
-	ai_many.WriteToDisk();
+	//ai_many.WriteToDisk();
 	
 	return 0;
 }
