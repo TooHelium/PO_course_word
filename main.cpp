@@ -79,13 +79,38 @@ private:
 			
 			return oss.str();
 		}
+		
+		void UpdateRanking(const DocFreqEntry& new_entry, size_t num_top)
+		{
+			if (desc_freq_ranking.size() < num_top 
+				|| new_entry.freq > desc_freq_ranking.back().freq) //when we delete we need this algorithm too !!!!!!!
+			{
+				auto it = std::find_if(desc_freq_ranking.begin(), desc_freq_ranking.end(), 
+									   [&new_entry](const DocFreqEntry& entry) 
+									   { 
+											return entry.doc_id == new_entry.doc_id; 
+									   });
+
+				if (it != desc_freq_ranking.end()) 
+					it->freq = new_entry.freq;
+				else 
+					desc_freq_ranking.push_back(new_entry);
+
+				std::sort(desc_freq_ranking.begin(), desc_freq_ranking.end(), 
+								 [](const DocFreqEntry& l, const DocFreqEntry& r) {
+									 return l.freq > r.freq;
+								 });
+								 
+				if (desc_freq_ranking.size() > num_top) //[10,164,18,71,67,]
+					desc_freq_ranking.pop_back(); 
+			}
+		}
 	};
 	
 	using TermsTable = std::unordered_map<TermType, TermInfo>;
 	
 	std::vector<TermsTable> table_;
 				 
-
 	size_t num_segments_;
 	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
 	
@@ -138,31 +163,7 @@ public:
 		std::vector<PosType>& positions = table_[i][term].doc_pos_map[doc_id];
 		positions.push_back(term_position);
 		
-		std::vector<DocFreqEntry>& ranking = table_[i][term].desc_freq_ranking;
-		//UpdateDecrFreqStat NOW
-		if (ranking.size() < num_top_doc_ids_ 
-		    || positions.size() > ranking.back().freq) //when we delete we need this algorithm too !!!!!!!
-		{
-			DocFreqEntry curr;//auto curr = DocFreqEntry{doc_id, positions.size()};
-			curr.doc_id = doc_id;
-			curr.freq = positions.size();
-
-			auto it = std::find_if(ranking.begin(), ranking.end(), 
-								   [&curr](const DocFreqEntry& entry) { return entry.doc_id == curr.doc_id; });
-
-			if (it != ranking.end()) 
-				it->freq = curr.freq;
-			else 
-				ranking.push_back(curr);
-
-			std::sort(ranking.begin(), ranking.end(), 
-							 [](const DocFreqEntry& l, const DocFreqEntry& r) {
-								 return l.freq > r.freq;
-							 });
-							 
-			if (ranking.size() > num_top_doc_ids_) //[10,164,18,71,67,]
-				ranking.pop_back(); 
-		}
+		table_[i][term].UpdateRanking( DocFreqEntry{doc_id, positions.size()}, num_top_doc_ids_ ); //maybe make it static for CLASS, eh?
 	}
 	
 	size_t SegmentSize(size_t i)
