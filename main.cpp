@@ -43,6 +43,42 @@ private:
 	{
 		DescFreqRanking desc_freq_ranking; //decr_freq_ranking
 		std::map<DocIdType, std::vector<PosType>> doc_pos_map; //maybe add some initialization
+		
+		std::string RankingToString() //maybe to be static? to not dupcilate in each of many objects
+		{
+			std::ostringstream oss;
+			
+			oss << "[";
+			
+			for (const DocFreqEntry& entry : desc_freq_ranking)
+				oss << entry.doc_id << ",";
+			
+			std::string res = oss.str();
+			res.back() = ']'; //remove the last comma
+			
+			return res;
+		}
+		
+		std::string MapToString()
+		{
+			std::ostringstream oss;
+			
+			for (const auto& doc_pos_pair : doc_pos_map)
+			{
+				oss << doc_pos_pair.first << "=";
+				
+				for (auto it = doc_pos_pair.second.begin(); it != doc_pos_pair.second.end(); ++it)
+				{
+					oss << *it;
+					if (std::next(it) != doc_pos_pair.second.end())
+						oss << ",";
+				}
+				
+				oss << ";"; //remove the last comma and ins 
+			}
+			
+			return oss.str();
+		}
 	};
 	
 	using TermsTable = std::unordered_map<TermType, TermInfo>;
@@ -166,24 +202,7 @@ public:
 				//term1:doc_id1=freaq,pos1,pos2,pos3,...,posn;doc_id2=...;
 				for (const TermType& term : terms)
 				{
-					file << term << ":" << "["; //i think can be combined
-					
-					for (const DocFreqEntry& entry : table_[i][term].desc_freq_ranking)
-						file << std::to_string(entry.doc_id) << ","; //the last coma is inaviTable
-					file << "]";
-					
-						
-					for (const auto& doc_pos_pair : table_[i][term].doc_pos_map)
-					{
-						file << std::to_string(doc_pos_pair.first) << "=";
-						
-						for (const PosType& pos : doc_pos_pair.second)
-							file << std::to_string(pos) << ",";
-						
-						file << ";";
-					}
-					
-					file << std::endl;
+					file << term << ":" << table_[i][term].RankingToString() << table_[i][term].MapToString() << std::endl;
 				}
 			}
 			
@@ -235,7 +254,7 @@ public:
 		return 0; //of DocIdType
 	}
 	
-	void MergeAiWithDisk()
+	/*void MergeAiWithDisk() //TODO
 	{
 		for (size_t i = 0; i < num_segments_; ++i)
 		{
@@ -297,7 +316,7 @@ public:
 			
 			file.close();
 		}
-	}
+	}*/
 };
 
 //std::atomic<size_t> D{0};
@@ -375,13 +394,13 @@ int main()
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\4"
 	};
 	
-	//walkdirs(dirs[0], ai_many);
-	//walkdirs(dirs[1], ai_many);
-	//walkdirs(dirs[2], ai_many);
-	//walkdirs(dirs[3], ai_many);
+	walkdirs(dirs[0], ai_many);
+	walkdirs(dirs[1], ai_many);
+	walkdirs(dirs[2], ai_many);
+	walkdirs(dirs[3], ai_many);
 	
-	//std::cout << "Writing to disk..." << std::endl;
-	
+	std::cout << "Writing to disk..." << std::endl;
+
 	ai_many.WriteToDisk();
 	
 	std::cout << "Reading from disk..." << std::endl;
