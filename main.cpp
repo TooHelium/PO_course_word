@@ -37,7 +37,6 @@ private:
 		DocIdType doc_id = 0;
 		FreqType freq = 0;
 	};
-	//using FreqDocIdPair = std::pair<FreqType, DocIdType>;
 	using DescFreqRanking = std::vector<DocFreqEntry>;
 	
 	struct TermInfo
@@ -45,10 +44,6 @@ private:
 		DescFreqRanking desc_freq_ranking; //decr_freq_ranking
 		std::unordered_map<DocIdType, std::vector<PosType>> doc_pos_map; //maybe add some initialization
 	};
-	//using TermInfo = std::pair< 
-	//							DecrFreqStat, 
-	//							std::unordered_map<DocIdType, std::vector<PosType>>
-	//						  >;
 	
 	using TermsTable = std::unordered_map<TermType, TermInfo>;
 	
@@ -58,9 +53,12 @@ private:
 	size_t num_segments_;
 	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
 	
-	std::string merge_path_ = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\merged index";
+	std::string main_index_path_ = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\main index";
+	std::string merge_index_path_ = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\merged index";
 	
 	size_t num_top_doc_ids_ = 5;
+	
+	std::vector<DocIdType> deleted_files_list_;
 	
 public:
 	AuxiliaryIndex(size_t s)
@@ -145,7 +143,7 @@ public:
 		{
 			std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
 			
-			std::string merge_filename = merge_path_ + "\\m" + std::to_string(i) + ".txt"; 
+			std::string merge_filename = main_index_path_ + "\\ma" + std::to_string(i) + ".txt"; //VAR NAME --
 			
 			std::ofstream file(merge_filename);
 			
@@ -207,7 +205,7 @@ public:
 	{
 		size_t i = GetSegmentIndex(term);
 		
-		std::string index_filename = merge_path_ + "\\m" + std::to_string(i) + ".txt"; //change path to main index
+		std::string index_filename = merge_path_ + "\\me" + std::to_string(i) + ".txt"; //change path to main index
 			
 		std::ifstream file(index_filename);
 		
@@ -245,6 +243,70 @@ public:
 		file.close(); //maybe delete?
 		
 		return 0; //of DocIdType
+	}
+	
+	void MergeAiWithDisk()
+	{
+		for (size_t i = 0; i < num_segments_; ++i)
+		{
+			std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
+			
+			std::string main_index_filename = main_index_path_ + "\\ma" + std::to_string(i) + ".txt"; 
+			std::string merge_index_filename = merge_index_path_ + "\\me" + std::to_string(i) + ".txt"; 
+			
+			std::ifstream ma_file(main_index_filename);
+			std::ofstream me_file(merge_index_filename);
+			
+			if (!ma_file && !me_file)
+			{
+				std::cerr << "Error opening files (ma, me)" << std::endl;
+			}
+			else
+			{
+				std::vector<TermType> terms;
+				terms.reserve( table_[i].size() );
+				
+				for (const auto& pair : table_[i])
+					terms.push_back(pair.first);
+				
+				std::sort(terms.begin(), terms.end()); //terms are sorted
+				
+				for (const TermType& term : terms)
+				{
+					std::vector<DocIdType> doc_ids;
+					doc_ids.reserve( table_[i][term].doc_pos_map.size() );	
+
+					for (const auto& pair : table_[i][term].doc_pos_map)
+						doc_ids.push_back(pair.first);
+					
+					std::sort(doc_ids.begin(), doc_ids.end()); //doc ids are sorted
+					
+					
+					
+					//
+					
+					file << term << ":" << "["; //i think can be combined
+					
+					for (const DocFreqEntry& entry : table_[i][term].desc_freq_ranking)
+						file << std::to_string(entry.doc_id) << ","; //the last coma is inaviTable
+					file << "]";
+						
+					for (const DocIdType& doc_id : doc_ids)
+					{
+						file << std::to_string(doc_id) << "=";
+						
+						for (const PosType& pos : table_[i][term].doc_pos_map[doc_id])
+							file << std::to_string(pos) << ",";
+						
+						file << ";";
+					}
+					
+					file << std::endl;
+				}
+			}
+			
+			file.close();
+		}
 	}
 };
 
@@ -318,12 +380,10 @@ int main()
 	AuxiliaryIndex ai_many(num_of_segments);
 	
 	
-	std::cout << ai_many.ReadFromDiskIndex("and") << std::endl; //10 4
-	std::cout << ai_many.ReadFromDiskIndex("south") << std::endl; //238 4
-	std::cout << ai_many.ReadFromDiskIndex("text") << std::endl; //94 8
 	
 	
-	/*
+	
+	
 	std::string dirs[4] = {
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1", //2 3 4 1
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\2",
@@ -335,13 +395,27 @@ int main()
 	walkdirs(dirs[1], ai_many);
 	walkdirs(dirs[2], ai_many);
 	walkdirs(dirs[3], ai_many);
-	*/
+	
+	std::cout << "Writing to disk..." << std::endl;
+	
+	ai_many.WriteToDisk();
+	
+	std::cout << "Reading from disk..." << std::endl;
+	
+	std::cout << ai_many.ReadFromDiskIndex("and") << std::endl; //10 4
+	std::cout << ai_many.ReadFromDiskIndex("south") << std::endl; //238 4
+	std::cout << ai_many.ReadFromDiskIndex("text") << std::endl; //94 8
 	
 	/*
 	int t = 4;
 	std::thread writers[t];
 	for (int i = 0; i < t; ++i)
 		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
+	std::vector<std::thread> readers;
+    for (int i = 0; i < 5; ++i) 
+	{
+        readers.emplace_back(reader, i); //MAYBE THIS WILL HELP !!!!!!!
+    }
 	
 	for (int i = 0; i < t; ++i)
 		writers[i].join();
@@ -357,9 +431,7 @@ int main()
 	std::cout << "Total :" << total << std::endl;
 	*/
 	
-	//std::cout << "Writing to disk..." << std::endl;
 	
-	//ai_many.WriteToDisk();
 	
 	return 0;
 }
@@ -382,6 +454,14 @@ int main()
 
 
 /*
+//using FreqDocIdPair = std::pair<FreqType, DocIdType>;
+
+	//using TermInfo = std::pair< 
+	//							DecrFreqStat, 
+	//							std::unordered_map<DocIdType, std::vector<PosType>>
+	//						  >;
+
+
 std::string dirs[5] = {
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1",
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\2",
@@ -449,71 +529,4 @@ std::string terms[] = {
 	"jellyfish", "kite", "lantern", "marble", "nectar"
 };
 
-std::string tmp[] = {
-	"a", "b", "c", "d", "e",
-	"f", "g", "h", "j", "k"
-};
-
-void read(int index)
-{
-	std::shared_lock<std::shared_mutex> _(shared_mutexes[index]);
-	
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_int_distribution<> dis(0, 39);
-	
-	int random_index = dis(gen);
-	
-	std::cout << "reader: " << terms[random_index] << std::endl;
-}
-
-void write(int index)
-{
-	std::unique_lock<std::shared_mutex> _(shared_mutexes[index]);
-	
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_int_distribution<> dis(0, 39);
-	
-	int random_index = dis(gen);
-	
-	std::uniform_int_distribution<> dis2(0, 9);
-	int r2 = dis2(gen);
-	
-	terms[random_index] = tmp[r2];
-	
-	std::cout << "writer: " << terms[random_index] << std::endl;
-}
-
-int main()
-{
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_int_distribution<> dis(0, 9);
-		
-	unsigned int table_segments = 10;
-	for (int i = 0; i < table_segments; ++i)
-	{
-		shared_mutexes.push_back(std::shared_mutex());
-	}
-	
-	unsigned int writers_amount = 4;
-	unsigned int readers_amount = 8;
-	std::vector<std::thread> writers;
-	std::vector<std::thread> readers;
-	for (int i = 0; i < writers_amount; ++i)
-	{
-		int random_index = dis(gen);
-		writers.push_back(std::thread(write, random_index));
-	}
-	for (int i = 0; i < readers_amount; ++i)
-	{
-		int random_index = dis(gen);
-		readers.push_back(std::thread(read, random_index));
-	}
-	
-	for (auto& t : writers) { t.join(); }
-	for (auto& t : readers) { t.join(); }
-	
-	return 0;
 }*/
