@@ -42,7 +42,7 @@ private:
 	struct TermInfo
 	{
 		DescFreqRanking desc_freq_ranking; //decr_freq_ranking
-		std::unordered_map<DocIdType, std::vector<PosType>> doc_pos_map; //maybe add some initialization
+		std::map<DocIdType, std::vector<PosType>> doc_pos_map; //maybe add some initialization
 	};
 	
 	using TermsTable = std::unordered_map<TermType, TermInfo>;
@@ -143,13 +143,13 @@ public:
 		{
 			std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
 			
-			std::string merge_filename = main_index_path_ + "\\ma" + std::to_string(i) + ".txt"; //VAR NAME --
+			std::string merge_filename = merge_index_path_ + "\\me" + std::to_string(i) + ".txt"; //VAR NAME --
 			
 			std::ofstream file(merge_filename);
 			
 			if (!file)
 			{
-				std::cerr << "Error opening " << merge_filename << std::endl;
+				std::cerr << "Error opening (writetodisk)" << merge_filename << std::endl;
 				//return; // VERY DANGEROUS
 			}
 			else
@@ -158,9 +158,7 @@ public:
 				terms.reserve( table_[i].size() );
 				
 				for (const auto& pair : table_[i])
-				{
 					terms.push_back(pair.first);
-				}
 				
 				std::sort(terms.begin(), terms.end());
 				
@@ -174,20 +172,12 @@ public:
 						file << std::to_string(entry.doc_id) << ","; //the last coma is inaviTable
 					file << "]";
 					
-					
-					std::vector<DocIdType> doc_ids;
-					doc_ids.reserve( table_[i][term].doc_pos_map.size() );
-					for (const auto& pair : table_[i][term].doc_pos_map)
-					{
-						doc_ids.push_back(pair.first);
-					}
-					std::sort(doc_ids.begin(), doc_ids.end());
 						
-					for (const DocIdType& doc_id : doc_ids)
+					for (const auto& doc_pos_pair : table_[i][term].doc_pos_map)
 					{
-						file << std::to_string(doc_id) << "=";
+						file << std::to_string(doc_pos_pair.first) << "=";
 						
-						for (const PosType& pos : table_[i][term].doc_pos_map[doc_id])
+						for (const PosType& pos : doc_pos_pair.second)
 							file << std::to_string(pos) << ",";
 						
 						file << ";";
@@ -205,7 +195,7 @@ public:
 	{
 		size_t i = GetSegmentIndex(term);
 		
-		std::string index_filename = merge_path_ + "\\me" + std::to_string(i) + ".txt"; //change path to main index
+		std::string index_filename = merge_index_path_ + "\\me" + std::to_string(i) + ".txt"; //change path to main index
 			
 		std::ifstream file(index_filename);
 		
@@ -376,13 +366,7 @@ void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
 int main()
 {
 	size_t num_of_segments = 10;          
-	
 	AuxiliaryIndex ai_many(num_of_segments);
-	
-	
-	
-	
-	
 	
 	std::string dirs[4] = {
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1", //2 3 4 1
@@ -391,12 +375,12 @@ int main()
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\4"
 	};
 	
-	walkdirs(dirs[0], ai_many);
-	walkdirs(dirs[1], ai_many);
-	walkdirs(dirs[2], ai_many);
-	walkdirs(dirs[3], ai_many);
+	//walkdirs(dirs[0], ai_many);
+	//walkdirs(dirs[1], ai_many);
+	//walkdirs(dirs[2], ai_many);
+	//walkdirs(dirs[3], ai_many);
 	
-	std::cout << "Writing to disk..." << std::endl;
+	//std::cout << "Writing to disk..." << std::endl;
 	
 	ai_many.WriteToDisk();
 	
@@ -406,22 +390,18 @@ int main()
 	std::cout << ai_many.ReadFromDiskIndex("south") << std::endl; //238 4
 	std::cout << ai_many.ReadFromDiskIndex("text") << std::endl; //94 8
 	
+	
 	/*
 	int t = 4;
 	std::thread writers[t];
 	for (int i = 0; i < t; ++i)
 		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
-	std::vector<std::thread> readers;
-    for (int i = 0; i < 5; ++i) 
-	{
-        readers.emplace_back(reader, i); //MAYBE THIS WILL HELP !!!!!!!
-    }
 	
 	for (int i = 0; i < t; ++i)
 		writers[i].join();
 	*/
 	
-	/*
+	
 	size_t total = 0;
 	std::cout << ai_many.Read("soft-core") << std::endl;
 	for (size_t i = 0; i < num_of_segments; ++i){
@@ -429,7 +409,7 @@ int main()
 		total += ai_many.SegmentSize(i);
 	}
 	std::cout << "Total :" << total << std::endl;
-	*/
+	
 	
 	
 	
