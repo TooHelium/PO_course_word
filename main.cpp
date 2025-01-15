@@ -131,6 +131,68 @@ private:
 	
 	std::vector<DocIdType> deleted_files_list_;
 	
+	struct Phrase
+	{
+		std::vector<TermInfo*> terms; //we can not have vectors of reference in simple way
+		std::vector<std::vector<PosType>*> pos_vectors;
+		size_t distance;
+		
+		Phrase(const std::vector<TermInfo*>& p, size_t d)
+		{
+			terms = p;
+			distance = d;
+		}
+		
+		bool FindIn(DocIdType doc_id) //somehow we need to make them wait for each other
+		{
+			for (TermInfo* term : terms)
+			{
+				auto it = term->doc_pos_map.find(doc_id);
+				if (it == term->doc_pos_map.end())
+					return false;
+				pos_vectors.push_back(&(it->second)); //get address of positions pos_vector
+			}
+			
+			size_t num_terms = terms.size();
+			std::vector<size_t> indexes(num_terms, 0);
+			std::vector<long long int> sliding_window(num_terms); //should be of type PosType, but then i need to use static_case in std::abs
+			
+			while (1)
+			{
+				for (size_t i = 0; i < num_terms; ++i)
+					sliding_window[i] = (*pos_vectors[i])[indexes[i]];
+				
+				bool is_chain = true;
+				for (size_t i = 1; i < num_terms; ++i)
+				{
+					if ( std::abs(sliding_window[i] - sliding_window[i-1]) > distance )
+					{
+						is_chain = false;
+						break;
+					}
+				}
+				
+				if (is_chain)
+					return true;
+				
+				size_t min_index = 0;
+				PosType min_value = sliding_window[0];
+				for (size_t i = 1; i < num_terms; ++i) 
+				{
+					if (sliding_window[i] < min_value) 
+					{
+						min_value = sliding_window[i];
+						min_index = i;
+					}
+				}
+				
+				indexes[min_index] += 1;
+				if (indexes[min_index] >= pos_vectors[min_index]->size()) 
+					return false;
+			}
+		}
+	};
+	
 public:
 	AuxiliaryIndex(size_t s)
 	{	
