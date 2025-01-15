@@ -41,10 +41,10 @@ private:
 	
 	struct TermInfo
 	{
-		DescFreqRanking desc_freq_ranking; //decr_freq_ranking
+		DescFreqRanking desc_freq_ranking;
 		std::map<DocIdType, std::vector<PosType>> doc_pos_map; //maybe add some initialization
 		
-		std::string RankingToString() //maybe to be static? to not dupcilate in each of many objects
+		std::string RankingToString()
 		{
 			std::ostringstream oss;
 			
@@ -65,17 +65,27 @@ private:
 			
 			for (const auto& doc_pos_pair : doc_pos_map)
 			{
-				oss << doc_pos_pair.first << "=";
+				oss << doc_pos_pair.first << "=" << doc_pos_pair.second.size();
 				
 				for (auto it = doc_pos_pair.second.begin(); it != doc_pos_pair.second.end(); ++it)
-				{
-					oss << *it;
-					if (std::next(it) != doc_pos_pair.second.end())
-						oss << ",";
-				}
+					oss << "," << *it;
 				
 				oss << ";"; //remove the last comma and ins 
 			}
+			
+			return oss.str();
+		}
+		
+		std::string MapEntryToString(const size_t& doc_id)
+		{
+			std::ostringstream oss;
+			
+			oss << doc_id << "=" << doc_pos_map[doc_id].size();
+			
+			for (auto it = doc_pos_map[doc_id].begin(); it != doc_pos_map[doc_id].end(); ++it)
+				oss << "," << *it;
+			
+			oss << ";";
 			
 			return oss.str();
 		}
@@ -180,7 +190,8 @@ public:
 		{
 			std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
 			
-			std::string merge_filename = merge_index_path_ + "\\me" + std::to_string(i) + ".txt"; //VAR NAME --
+			//std::string merge_filename = merge_index_path_ + "\\me" + std::to_string(i) + ".txt"; //VAR NAME --
+			std::string merge_filename = main_index_path_ + "\\ma" + std::to_string(i) + ".txt";
 			
 			std::ofstream file(merge_filename);
 			
@@ -199,14 +210,11 @@ public:
 				
 				std::sort(terms.begin(), terms.end());
 				
-				//now write to merge file
-				//term1:doc_id1=freaq,pos1,pos2,pos3,...,posn;doc_id2=...;
 				for (const TermType& term : terms)
 				{
 					file << term << ":" << table_[i][term].RankingToString() << table_[i][term].MapToString() << std::endl;
 				}
 			}
-			
 			file.close();
 		}
 	}
@@ -255,17 +263,18 @@ public:
 		return 0; //of DocIdType
 	}
 	
-	/*void MergeAiWithDisk() //TODO
+	void MergeAiWithDisk() //TODO
 	{
+		size_t D = 0;
 		for (size_t i = 0; i < num_segments_; ++i)
 		{
 			std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
 			
-			std::string main_index_filename = main_index_path_ + "\\ma" + std::to_string(i) + ".txt"; 
-			std::string merge_index_filename = merge_index_path_ + "\\me" + std::to_string(i) + ".txt"; 
+			std::string index_filename = main_index_path_ + "\\ma" + std::to_string(i) + ".txt"; 
+			std::string merge_filename = merge_index_path_ + "\\me" + std::to_string(i) + ".txt"; 
 			
-			std::ifstream ma_file(main_index_filename);
-			std::ofstream me_file(merge_index_filename);
+			std::ifstream ma_file(index_filename);
+			std::ofstream me_file(merge_filename);
 			
 			if (!ma_file && !me_file)
 			{
@@ -280,47 +289,121 @@ public:
 					terms.push_back(pair.first);
 				
 				std::sort(terms.begin(), terms.end()); //terms are sorted
+				auto terms_it = terms.begin();
+				auto terms_end = terms.end();
 				
-				for (const TermType& term : terms)
+				
+				std::string line;
+				std::regex term_regex("^(.+):"); //"\\w+(['-]\\w+)*" maybe to use this?
+				std::regex term_info_regex("\\d+=\\d+,[^;]+;"); //be cautious, my friend
+				std::regex doc_freq_regex("(\\d+)=(\\d+)");
+				std::smatch match;
+				
+				while (std::getline(ma_file, line))
 				{
-					std::vector<DocIdType> doc_ids;
-					doc_ids.reserve( table_[i][term].doc_pos_map.size() );	
-
-					for (const auto& pair : table_[i][term].doc_pos_map)
-						doc_ids.push_back(pair.first);
-					
-					std::sort(doc_ids.begin(), doc_ids.end()); //doc ids are sorted
-					
-					
-					
-					//
-					
-					file << term << ":" << "["; //i think can be combined
-					
-					for (const DocFreqEntry& entry : table_[i][term].desc_freq_ranking)
-						file << std::to_string(entry.doc_id) << ","; //the last coma is inaviTable
-					file << "]";
-						
-					for (const DocIdType& doc_id : doc_ids)
+					//maybe add regex check on correct line?
+					if (terms_it == terms_end)
 					{
-						file << std::to_string(doc_id) << "=";
-						
-						for (const PosType& pos : table_[i][term].doc_pos_map[doc_id])
-							file << std::to_string(pos) << ",";
-						
-						file << ";";
+						me_file << line << std::endl;
+						continue;
 					}
 					
-					file << std::endl;
+					if (std::regex_search(line, match, term_regex))
+					{
+						while (terms_it != terms_end && *terms_it < match[1].str())
+						{
+							me_file << *terms_it << ":" 
+									<< table_[i][*terms_it].RankingToString() 
+									<< table_[i][*terms_it].MapToString() << std::endl;
+							++terms_it;
+						}
+						if (terms_it == terms_end || *terms_it > match[1].str())
+						{
+							me_file << line << std::endl;
+							continue;
+						}
+						else //if they equal
+						{
+							++D; //
+							
+							me_file << *terms_it << ":";
+							
+							std::ostringstream oss;
+							std::ostringstream oss_freq;
+							
+							TermInfo& merged_term = table_[i][*terms_it];
+							auto m_it = merged_term.doc_pos_map.begin();
+							auto m_end = merged_term.doc_pos_map.end();
+							 //using for sorting rankings only. maybe to use existed?
+							
+							auto begin = std::sregex_token_iterator(line.begin(), line.end(), term_info_regex);
+							auto end = std::sregex_token_iterator();
+							std::smatch df_match_d;
+							
+							for (auto it = begin; it != end; ++it)
+							{	
+								std::string tmp = it->str();
+								if (std::regex_search(tmp, df_match_d, doc_freq_regex))
+								{
+									while (m_it != m_end)
+									{
+										if (static_cast<DocIdType>( std::stoul(df_match_d[1].str()) ) >= m_it->first)
+										{
+											oss << merged_term.MapEntryToString(m_it->first);
+											++m_it;
+										}
+										else
+											break;
+									}
+
+									oss << tmp; //duplicate
+									
+									merged_term.UpdateRanking
+									( 
+										DocFreqEntry{
+														static_cast<DocIdType>( std::stoul(df_match_d[1].str()) ), 
+														static_cast<FreqType>( std::stoul(df_match_d[2].str()) )
+													}, 
+										num_top_doc_ids_ 
+									);
+								}
+							}
+							while (m_it != m_end)
+							{
+								oss << merged_term.MapEntryToString(m_it->first);
+								++m_it;
+							}
+							
+							oss_freq << merged_term.RankingToString();
+							
+							me_file << oss_freq.str();
+							me_file << oss.str();
+							
+							me_file << std::endl;
+							
+							++terms_it;
+						} //if they equal
+							
+					}
+
 				}
+				
+				while (terms_it != terms_end)
+				{
+					me_file << *terms_it << ":" 
+							<< table_[i][*terms_it].RankingToString() 
+							<< table_[i][*terms_it].MapToString() << std::endl;
+					++terms_it;
+				}
+				
 			}
 			
-			file.close();
+			ma_file.close();
+			me_file.close();
 		}
-	}*/
+		std::cout << "D: " << D << std::endl;
+	}
 };
-
-//std::atomic<size_t> D{0};
 
 void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
 {
@@ -395,20 +478,23 @@ int main()
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\4"
 	};
 	
-	walkdirs(dirs[0], ai_many);
-	walkdirs(dirs[1], ai_many);
+	//walkdirs(dirs[0], ai_many);
+	//walkdirs(dirs[1], ai_many);
 	walkdirs(dirs[2], ai_many);
 	walkdirs(dirs[3], ai_many);
 	
 	std::cout << "Writing to disk..." << std::endl;
 
-	ai_many.WriteToDisk();
+	//ai_many.WriteToDisk(); //importang !!!!!
 	
-	std::cout << "Reading from disk..." << std::endl;
+	ai_many.MergeAiWithDisk();
 	
-	std::cout << ai_many.ReadFromDiskIndex("and") << std::endl; //10 4
-	std::cout << ai_many.ReadFromDiskIndex("south") << std::endl; //238 4
-	std::cout << ai_many.ReadFromDiskIndex("text") << std::endl; //94 8
+	//std::cout << "Reading from disk..." << std::endl;
+	
+	//std::cout << ai_many.ReadFromDiskIndex("and") << std::endl; //10 4
+	//std::cout << ai_many.ReadFromDiskIndex("south") << std::endl; //238 4
+	//std::cout << ai_many.ReadFromDiskIndex("text") << std::endl; //94 8
+	//std::cout << ai_many.Read("soft-core") << std::endl;
 	
 	
 	/*
@@ -423,110 +509,11 @@ int main()
 	
 	
 	size_t total = 0;
-	std::cout << ai_many.Read("soft-core") << std::endl;
 	for (size_t i = 0; i < num_of_segments; ++i){
 		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
 		total += ai_many.SegmentSize(i);
 	}
 	std::cout << "Total :" << total << std::endl;
 	
-	
-	
-	
 	return 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-//using FreqDocIdPair = std::pair<FreqType, DocIdType>;
-
-	//using TermInfo = std::pair< 
-	//							DecrFreqStat, 
-	//							std::unordered_map<DocIdType, std::vector<PosType>>
-	//						  >;
-
-
-std::string dirs[5] = {
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1",
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\2",
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\3",
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\4",
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\5"
-	};
-	
-	AuxiliaryIndex ai_one(10);
-
-	walkdirs(dirs[0], ai_one);
-	walkdirs(dirs[1], ai_one);
-	walkdirs(dirs[2], ai_one);
-	walkdirs(dirs[3], ai_one);
-	walkdirs(dirs[4], ai_one);
-	
-	std::cout << ai_one.Read("windows11hplaptop") << std::endl;
-	for (size_t i = 0; i < 10; ++i)
-		std::cout << i << " " << ai_one.SegmentSize(i) << std::endl;
-
-	
-	AuxiliaryIndex ai_many(10);
-	std::thread writers[5];
-	
-	for (int i = 0; i < 5; ++i)
-	{
-		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
-	}
-	
-	
-	//walkdirs("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1", ai);
-	
-	
-	
-	for (int i = 0; i < 5; ++i)
-	{
-		writers[i].join();
-	}
-	
-	std::cout << ai_many.Read("windows11hplaptop") << std::endl;
-	for (size_t i = 0; i < 10; ++i)
-		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
-
-
-
-
-
-
-
-
-
-
-
-std::unordered_map<std::string, std::vector<std::pair<int,int>>> my_map;
-std::vector<std::shared_mutex> shared_mutexes;
-	
-std::string terms[] = {
-	"apple", "bicycle", "candle", "dragon", "elephant", 
-	"flower", "guitar", "honey", "island", "jungle",
-	"kitten", "lemon", "mountain", "notebook", "orange", 
-	"piano", "quartz", "rainbow", "sunflower", "tulip",
-	"umbrella", "violet", "whale", "xylophone", "yogurt", 
-	"zebra", "arrow", "butterfly", "castle", "dolphin",
-	"eagle", "falcon", "grape", "hazelnut", "igloo", 
-	"jellyfish", "kite", "lantern", "marble", "nectar"
-};
-
-}*/
