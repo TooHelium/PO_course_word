@@ -214,13 +214,16 @@ public:
 		return hash_value % num_segments_;
 	}
 
-	void SplitIntoPhrases(const std::string& query, std::vector<Phrase>& phrases)
+	void SplitIntoPhrases(std::string query, std::vector<Phrase>& phrases)
 	{
+		std::transform(query.begin(), query.end(), query.begin(), 
+						[](unsigned char c) { return std::tolower(c); });
+		
 		std::string word = "\\w+(['-]\\w+)*";
 		
 		std::regex word_regex(word);
 		std::regex distance_regex("\\)(\\d+)");
-		std::regex phrase_regex("\\((" + word + "(\\s+" + word + ")*)\\)\\d*");	
+		std::regex phrase_regex("\\([^\\w]*((" + word + ")([^\\w]*" + word + ")*)[^\\w]*\\)(\\d*)");	
 		
 		auto phrases_begin = std::sregex_iterator(query.begin(), query.end(), phrase_regex);
 		auto phrases_end = std::sregex_iterator();
@@ -287,7 +290,7 @@ public:
 			
 		continue_outter_loop:
 		}
-		
+		std::cout << "11111"; //d
 		return 0;
 		
 		//release the locks
@@ -610,7 +613,7 @@ void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
 
 int main()
 {
-	size_t num_of_segments = 1;          
+	size_t num_of_segments = 10;          
 	AuxiliaryIndex ai_many(num_of_segments);
 	
 	std::string dirs[4] = {
@@ -620,18 +623,20 @@ int main()
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\4"
 	};
 	
-	//walkdirs(dirs[0], ai_many);
-	//walkdirs(dirs[1], ai_many);
-	//walkdirs(dirs[2], ai_many);
+	walkdirs(dirs[0], ai_many);
+	walkdirs(dirs[1], ai_many);
+	walkdirs(dirs[2], ai_many);
 	walkdirs(dirs[3], ai_many);
 	
 	//std::cout << "Writing to disk..." << std::endl;
 
 	//ai_many.WriteToDisk(); //importang !!!!!
 	
-	std::cout << "Phrase in " << ai_many.ReadPhrase(" (this)4 ") << std::endl;
+	std::cout << "Searching phrase..." << std::endl;
 	
-	ai_many.MergeAiWithDisk();
+	std::cout << "Phrase in " << ai_many.ReadPhrase(" (The dance is sort of)2 ") << std::endl;
+	
+	//ai_many.MergeAiWithDisk();
 	
 	//std::cout << "Reading from disk..." << std::endl;
 	
