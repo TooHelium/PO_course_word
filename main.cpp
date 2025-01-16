@@ -133,26 +133,24 @@ private:
 	
 	struct Phrase
 	{
-		std::vector<TermInfo*> terms; //we can not have vectors of reference in simple way
-		std::vector<std::vector<PosType>*> pos_vectors;
+		std::vector<TermType> words;
+		std::vector<TermInfo*> terms; //we can not have vectors of reference in simple way RENAME
+		//std::vector<std::vector<PosType>*> pos_vectors;
 		size_t distance;
-		
-		Phrase(const std::vector<TermInfo*>& p, size_t d)
-		{
-			terms = p;
-			distance = d;
-		}
 		
 		bool FindIn(DocIdType doc_id) //somehow we need to make them wait for each other
 		{
+			std::vector<std::vector<PosType>*> pos_vectors;
+			
 			for (TermInfo* term : terms)
 			{
 				auto it = term->doc_pos_map.find(doc_id);
 				if (it == term->doc_pos_map.end())
 					return false;
 				pos_vectors.push_back(&(it->second)); //get address of positions pos_vector
-			}
+			}			
 			
+			//use score function?
 			size_t num_terms = terms.size();
 			std::vector<size_t> indexes(num_terms, 0);
 			std::vector<long long int> sliding_window(num_terms); //should be of type PosType, but then i need to use static_case in std::abs
@@ -173,7 +171,10 @@ private:
 				}
 				
 				if (is_chain)
+				{
+					//std::cout << "doc_id!!! " << doc_id << std::endl;//d
 					return true;
+				}
 				
 				size_t min_index = 0;
 				PosType min_value = sliding_window[0];
@@ -192,7 +193,7 @@ private:
 			}
 		}
 	};
-	
+	// 'cat' 'tasky cookies'
 public:
 	AuxiliaryIndex(size_t s)
 	{	
@@ -213,6 +214,85 @@ public:
 		return hash_value % num_segments_;
 	}
 
+	void SplitIntoPhrases(const std::string& query, std::vector<Phrase>& phrases)
+	{
+		std::string word = "\\w+(['-]\\w+)*";
+		
+		std::regex word_regex(word);
+		std::regex distance_regex("\\)(\\d+)");
+		std::regex phrase_regex("\\((" + word + "(\\s+" + word + ")*)\\)\\d*");	
+		
+		auto phrases_begin = std::sregex_iterator(query.begin(), query.end(), phrase_regex);
+		auto phrases_end = std::sregex_iterator();
+		
+		std::smatch match;
+		
+		for (auto it = phrases_begin; it != phrases_end; ++it) 
+		{
+			match = *it;
+			
+			Phrase phrase;
+		
+			auto words_begin = std::sregex_iterator(match[1].first, match[1].second, word_regex);
+			auto words_end = std::sregex_iterator();
+
+			for (auto word_it = words_begin; word_it != words_end; ++word_it) 
+				phrase.words.push_back(word_it->str());
+			
+			std::string tmp = match[0].str();
+			if (std::regex_search(tmp, match, distance_regex))	
+				phrase.distance = std::stoull( match[1].str() );
+			else
+				phrase.distance = 1; //default distance. maybe  in separate class variable
+			
+			phrases.push_back(phrase);
+		}
+	}
+
+	DocIdType ReadPhrase(const std::string& query)
+	{
+		std::vector<Phrase> phrases;
+		SplitIntoPhrases(query, phrases);
+		
+		std::vector<std::shared_lock<std::shared_mutex>> locks;
+		
+		//std::unordered_set<size_t> acquired_segments;
+		for (Phrase& phrase : phrases)
+		{
+			for (const TermType& word : phrase.words)
+			{
+				size_t i = GetSegmentIndex(word);
+				locks.emplace_back(*segments_[i]);
+				//acquired_segments.insert(i);
+				auto it = table_[i].find(word);
+				if (it != table_[i].end())
+					phrase.terms.push_back( &(it->second) ); //RENAME terms in its struct
+				else
+					return 0;//attention
+			}
+		}
+		
+		DocIdType doc_id;
+		for (const auto& pair : phrases[0].terms[0]->doc_pos_map)
+		{	
+			doc_id = pair.first;
+			
+			for (Phrase& phrase : phrases)
+			{
+				if (!phrase.FindIn(doc_id))
+					goto continue_outter_loop;
+			}
+			
+			return doc_id;
+			
+		continue_outter_loop:
+		}
+		
+		return 0;
+		
+		//release the locks
+	}
+
 	DocIdType Read(const TermType& term) 
 	{
 		size_t i = GetSegmentIndex(term);
@@ -230,7 +310,7 @@ public:
 	{
 		size_t i = GetSegmentIndex(term);
 		
-		std::unique_lock<std::shared_mutex> _(*segments_[i]);
+		std::unique_lock<std::shared_mutex> _(*segments_[i]); //!!!!!maybe star * to go out the scope
 		
 		std::vector<PosType>& positions = table_[i][term].doc_pos_map[doc_id];
 		positions.push_back(term_position);
@@ -327,7 +407,7 @@ public:
 	
 	void MergeAiWithDisk() //TODO
 	{
-		size_t D = 0;
+		//size_t D = 0;
 		for (size_t i = 0; i < num_segments_; ++i)
 		{
 			std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
@@ -386,7 +466,7 @@ public:
 						}
 						else //if they equal
 						{
-							++D; //
+							//++D; //
 							
 							me_file << *terms_it << ":";
 							
@@ -463,7 +543,7 @@ public:
 			ma_file.close();
 			me_file.close();
 		}
-		std::cout << "D: " << D << std::endl;
+		//std::cout << "D: " << D << std::endl;
 	}
 };
 
@@ -530,7 +610,7 @@ void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
 
 int main()
 {
-	size_t num_of_segments = 10;          
+	size_t num_of_segments = 1;          
 	AuxiliaryIndex ai_many(num_of_segments);
 	
 	std::string dirs[4] = {
@@ -542,12 +622,14 @@ int main()
 	
 	//walkdirs(dirs[0], ai_many);
 	//walkdirs(dirs[1], ai_many);
-	walkdirs(dirs[2], ai_many);
+	//walkdirs(dirs[2], ai_many);
 	walkdirs(dirs[3], ai_many);
 	
-	std::cout << "Writing to disk..." << std::endl;
+	//std::cout << "Writing to disk..." << std::endl;
 
 	//ai_many.WriteToDisk(); //importang !!!!!
+	
+	std::cout << "Phrase in " << ai_many.ReadPhrase(" (this)4 ") << std::endl;
 	
 	ai_many.MergeAiWithDisk();
 	
