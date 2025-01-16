@@ -135,10 +135,9 @@ private:
 	{
 		std::vector<TermType> words;
 		std::vector<TermInfo*> terms; //we can not have vectors of reference in simple way RENAME
-		//std::vector<std::vector<PosType>*> pos_vectors;
 		size_t distance;
 		
-		bool FindIn(DocIdType doc_id) //somehow we need to make them wait for each other
+		size_t FindIn(DocIdType doc_id) //somehow we need to make them wait for each other
 		{
 			std::vector<std::vector<PosType>*> pos_vectors;
 			
@@ -146,7 +145,7 @@ private:
 			{
 				auto it = term->doc_pos_map.find(doc_id);
 				if (it == term->doc_pos_map.end())
-					return false;
+					return 0;//false;
 				pos_vectors.push_back(&(it->second)); //get address of positions pos_vector
 			}			
 			
@@ -155,41 +154,54 @@ private:
 			std::vector<size_t> indexes(num_terms, 0);
 			std::vector<long long int> sliding_window(num_terms); //should be of type PosType, but then i need to use static_case in std::abs
 			
+			size_t curr_score = 0;
+			size_t max_score = curr_score;
+			
 			while (1)
 			{
 				for (size_t i = 0; i < num_terms; ++i)
 					sliding_window[i] = (*pos_vectors[i])[indexes[i]];
 				
 				bool is_chain = true;
+				curr_score = 0;
 				for (size_t i = 1; i < num_terms; ++i)
 				{
 					if ( std::abs(sliding_window[i] - sliding_window[i-1]) > distance )
 					{
 						is_chain = false;
-						break;
+						continue;//break;
 					}
+					++curr_score;
 				}
+				
+				max_score = (curr_score > max_score) ? curr_score : max_score;
 				
 				if (is_chain)
 				{
 					//std::cout << "doc_id!!! " << doc_id << std::endl;//d
-					return true;
+					return max_score;//true;
 				}
 				
 				size_t min_index = 0;
 				PosType min_value = sliding_window[0];
 				for (size_t i = 1; i < num_terms; ++i) 
 				{
-					if (sliding_window[i] < min_value) 
+					if (sliding_window[i] <= min_value) 
 					{
 						min_value = sliding_window[i];
 						min_index = i;
 					}
 				}
 				
+				//del
+				//for (auto w : sliding_window)
+				//	std::cout << w << " ";
+				//std::cout << std::endl;
+				//del
+				
 				indexes[min_index] += 1;
 				if (indexes[min_index] >= pos_vectors[min_index]->size()) 
-					return false;
+					return max_score; //maybe continue with others?
 			}
 		}
 	};
@@ -275,23 +287,32 @@ public:
 			}
 		}
 		
-		DocIdType doc_id;
+		DocIdType curr_doc_id;
+		DocIdType best_doc_id = 0;
+		size_t curr_score = 0;
+		size_t max_score = curr_score;
 		for (const auto& pair : phrases[0].terms[0]->doc_pos_map)
 		{	
-			doc_id = pair.first;
+			curr_doc_id = pair.first;
 			
+			curr_score = 0;
 			for (Phrase& phrase : phrases)
 			{
-				if (!phrase.FindIn(doc_id))
-					goto continue_outter_loop;
+				curr_score += phrase.FindIn(curr_doc_id);
+				//if (!phrase.FindIn(curr_doc_id))
+					//goto continue_outter_loop;
 			}
 			
-			return doc_id;
+			if (curr_score > max_score)
+			{
+				max_score = curr_score;
+				best_doc_id = curr_doc_id;
+			}
 			
-		continue_outter_loop:
+		//continue_outter_loop:
 		}
-		std::cout << "11111"; //d
-		return 0;
+		
+		return best_doc_id;
 		
 		//release the locks
 	}
@@ -634,7 +655,7 @@ int main()
 	
 	std::cout << "Searching phrase..." << std::endl;
 	
-	std::cout << "Phrase in " << ai_many.ReadPhrase(" (The dance is sort of)2 ") << std::endl;
+	std::cout << "Phrase in " << ai_many.ReadPhrase(" (once a star football player, whose mother was a practitioner of voodoo.) ") << std::endl;
 	
 	//ai_many.MergeAiWithDisk();
 	
