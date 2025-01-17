@@ -3,7 +3,7 @@
 #include <fstream>
 #include <algorithm> 
 #include <cctype>
-
+#include <utility> //for swap()
 #include <thread>
 
 #include <filesystem>
@@ -124,12 +124,48 @@ private:
 	size_t num_segments_;
 	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
 	
-	std::string main_index_path_ = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\main index";
-	std::string merge_index_path_ = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\merged index";
+	//std::shared_mutex path_mtx_;
+	//std::string main_index_path_;
+	//std::string merge_index_path_;
 	
-	size_t num_top_doc_ids_ = 5;
+	size_t num_top_doc_ids_ = 5; //can be set in constuctor
 	
 	std::vector<DocIdType> deleted_files_list_;
+	
+	struct IndexPath
+	{
+	private:
+		std::string main;
+		std::string merge;
+		std::unique_ptr<std::shared_mutex> mtx_ptr;
+	public:
+		IndexPath(const std::string& ma, const std::string& me, std::unique_ptr<std::shared_mutex> mp)
+		{
+			main = ma;
+			merge = me;
+			mtx_ptr = std::move(mp);
+		}
+		
+		void UpdateMainIndexPath()
+		{
+			std::unique_lock<std::shared_mutex> _(*mtx_ptr);
+			std::swap(main, merge);
+		}
+		
+		std::string GetMainIndexPath()
+		{
+			std::shared_lock<std::shared_mutex> _(*mtx_ptr);
+			return main;
+		}
+		
+		std::string GetMergeIndexPath()
+		{
+			std::shared_lock<std::shared_mutex> _(*mtx_ptr);
+			return merge;
+		}
+	};
+	
+	std::vector<IndexPath> indexes_paths_;
 	
 	struct Phrase
 	{
@@ -178,8 +214,7 @@ private:
 				
 				if (is_chain)
 				{
-					//std::cout << "doc_id!!! " << doc_id << std::endl;//d
-					return max_score;//true;
+					return max_score; //i have an idea to add bonus score for each whole finded phrase. so return will be in the end
 				}
 				
 				size_t min_index = 0;
@@ -193,21 +228,15 @@ private:
 					}
 				}
 				
-				//del
-				//for (auto w : sliding_window)
-				//	std::cout << w << " ";
-				//std::cout << std::endl;
-				//del
-				
 				indexes[min_index] += 1;
 				if (indexes[min_index] >= pos_vectors[min_index]->size()) 
 					return max_score; //maybe continue with others?
 			}
 		}
 	};
-	// 'cat' 'tasky cookies'
+
 public:
-	AuxiliaryIndex(size_t s)
+	AuxiliaryIndex(size_t s, const std::string& ma, const std::string& me)
 	{	
 		num_segments_ = s ? s : 1; //to make sure s is always > 0
 		
@@ -215,9 +244,19 @@ public:
 		
 		segments_.reserve(num_segments_); //add some try catch
 		for (size_t i = 0; i < num_segments_; ++i)
-		{
 			segments_.emplace_back(std::make_unique<std::shared_mutex>());
-		}
+		
+		for (size_t i = 0; i < num_segments_; ++i) //creating initial empty main index
+		{
+			std::ofstream file(ma + "i" + std::to_string(i) + ".txt");
+			if (!file.is_open())
+				std::cout << "Error creating initial index file " << i << std::endl;
+			file.close();
+		}		
+		
+		for (size_t i = 0; i < num_segments_; ++i)
+			indexes_paths_.emplace_back(ma, me, std::make_unique<std::shared_mutex>());
+			
 	}
 
 	size_t GetSegmentIndex(const TermType& term) 
@@ -350,14 +389,14 @@ public:
 		return 0;
 	}
 	
-	void WriteToDisk()
+	void WriteToDisk() //change file name (old was 'me') TODO
 	{
 		for (size_t i = 0; i < num_segments_; ++i)
 		{
 			std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
 			
 			//std::string merge_filename = merge_index_path_ + "\\me" + std::to_string(i) + ".txt"; //VAR NAME --
-			std::string merge_filename = main_index_path_ + "\\ma" + std::to_string(i) + ".txt";
+			std::string merge_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt";
 			
 			std::ofstream file(merge_filename);
 			
@@ -389,7 +428,7 @@ public:
 	{
 		size_t i = GetSegmentIndex(term);
 		
-		std::string index_filename = merge_index_path_ + "\\me" + std::to_string(i) + ".txt"; //change path to main index
+		std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; //change path to main index
 			
 		std::ifstream file(index_filename);
 		
@@ -429,15 +468,14 @@ public:
 		return 0; //of DocIdType
 	}
 	
-	void MergeAiWithDisk() //TODO
+	void MergeAiWithDisk(size_t i) //TODO
 	{
-		//size_t D = 0;
-		for (size_t i = 0; i < num_segments_; ++i)
+		//for (size_t i = 0; i < num_segments_; ++i)
 		{
 			std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
 			
-			std::string index_filename = main_index_path_ + "\\ma" + std::to_string(i) + ".txt"; 
-			std::string merge_filename = merge_index_path_ + "\\me" + std::to_string(i) + ".txt"; 
+			std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; 
+			std::string merge_filename = indexes_paths_[i].GetMergeIndexPath() + "i" + std::to_string(i) + ".txt"; 
 			
 			std::ifstream ma_file(index_filename);
 			std::ofstream me_file(merge_filename);
@@ -457,7 +495,6 @@ public:
 				std::sort(terms.begin(), terms.end()); //terms are sorted
 				auto terms_it = terms.begin();
 				auto terms_end = terms.end();
-				
 				
 				std::string line;
 				std::regex term_regex("^(.+):"); //"\\w+(['-]\\w+)*" maybe to use this?
@@ -489,9 +526,7 @@ public:
 							continue;
 						}
 						else //if they equal
-						{
-							//++D; //
-							
+						{							
 							me_file << *terms_it << ":";
 							
 							std::ostringstream oss;
@@ -566,8 +601,11 @@ public:
 			
 			ma_file.close();
 			me_file.close();
+			
+			table_[i].clear();
+			
+			indexes_paths_[i].UpdateMainIndexPath();
 		}
-		//std::cout << "D: " << D << std::endl;
 	}
 };
 
@@ -635,7 +673,9 @@ void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
 int main()
 {
 	size_t num_of_segments = 10;          
-	AuxiliaryIndex ai_many(num_of_segments);
+	std::string ma = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\main index\\";
+	std::string me = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\merged index\\";
+	AuxiliaryIndex ai_many(num_of_segments, ma, me);
 	
 	std::string dirs[4] = {
 		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1", //2 3 4 1
@@ -655,9 +695,11 @@ int main()
 	
 	std::cout << "Searching phrase..." << std::endl;
 	
-	std::cout << "Phrase in " << ai_many.ReadPhrase(" (once a star football player, whose mother was a practitioner of voodoo.) ") << std::endl;
+	std::cout << "Phrase in " << ai_many.ReadPhrase(" (home-made style) (visual) (effects, awkward dialogue,) ") << std::endl;
 	
-	//ai_many.MergeAiWithDisk();
+	std::cout << "Merging..." << std::endl;
+	ai_many.MergeAiWithDisk(4);
+	ai_many.MergeAiWithDisk(4);
 	
 	//std::cout << "Reading from disk..." << std::endl;
 	
@@ -687,3 +729,37 @@ int main()
 	
 	return 0;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+class IndexManager
+{
+private:
+	std::string main_index_path_;
+	std::string merge_index_path_;
+	size_t merged_index_no_ = 0;
+	std::vector<std::string> merged_indexes_paths_;
+	
+	void UpdateMainIndexPath()
+	{
+		shr_mtx _()
+		main_index_path_ = merged_indexes_paths_[merge_index_no_];
+		merge_index_no_ = (merge_index_no_ + 1) % merged_indexes_paths_.size();
+		merge_index_path_ = merged_indexes_paths_[merge_index_no_];
+	}
+	
+}
+*/
