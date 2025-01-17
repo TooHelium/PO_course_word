@@ -15,14 +15,16 @@
 #include <shared_mutex> //for class
 
 #include <functional> // For std::hash
-
+#include <stdexcept>
 #include <mutex>
+#include <chrono> //for thread to sleep
 
 //#include <queue>
 
 #include <set>
 
 #include <atomic>
+#include <unordered_set> //for Sheduler
 
 class AuxiliaryIndex
 {
@@ -123,10 +125,6 @@ private:
 				 
 	size_t num_segments_;
 	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
-	
-	//std::shared_mutex path_mtx_;
-	//std::string main_index_path_;
-	//std::string merge_index_path_;
 	
 	size_t num_top_doc_ids_ = 5; //can be set in constuctor
 	
@@ -381,7 +379,7 @@ public:
 		table_[i][term].UpdateRanking( DocFreqEntry{doc_id, positions.size()}, num_top_doc_ids_ ); //maybe make it static for CLASS, eh?
 	}
 	
-	size_t SegmentSize(size_t i)
+	size_t SegmentSize(size_t i) //TODO syncronization
 	{
 		if (i < table_.size())
 			return table_[i].size();
@@ -670,8 +668,97 @@ void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
 }
 
 
+class Sheduler //TODO i think we need delete code that remove _number part from data file's path
+{
+private:
+	std::string data_path_;
+	//AuxiliaryIndex& ai_;
+	std::chrono::duration<size_t> duration_;
+	std::unordered_set<std::string> monitored_dirs_; //directories a Sheduler know about. they are unique
+	
+	std::string ready_dir_marker_ = "___"; // 3 underscores
+	/*struct Task()
+	{
+		auto add_data = [ai_](const std::string& path)
+		{
+			ai_.Write(path);
+		}
+		merge_index
+	}*/
+	
+public:
+	Sheduler(const std::string dp, /*AuxiliaryIndex& ai,*/ size_t sleep_duration)
+	{
+		if ( !(fs::exists(dp) && fs::is_directory(dp)) )
+			throw std::invalid_argument("Data path does not exist or is not a directory");
+		
+		data_path_ = dp;
+		//ai_ = ai;
+		duration_ = std::chrono::seconds( sleep_duration );
+	}
+	
+	void MonitorData()
+	{
+		std::string curr_dir;
+		
+		while (1)
+		{
+			std::this_thread::sleep_for(duration_);
+			
+			for (const auto& entry : fs::directory_iterator(data_path_))
+			{
+				if (fs::is_directory(entry.path()) && DirIsReady(entry.path()))
+				{		
+					curr_dir = entry.path().string();
+				
+					if (monitored_dirs_.find(curr_dir) == monitored_dirs_.end())
+					{
+						std::cout << "New directory " << curr_dir << std::endl;
+						monitored_dirs_.insert(curr_dir);
+					}
+				}
+			}
+		}
+	}
+	
+	bool DirIsReady(const fs::path& path)
+	{
+		std::string path_stem = path.stem().string();
+		
+		if ( path_stem.substr(path_stem.length() - 3) == ready_dir_marker_ )
+			return true;
+		
+		return false;
+	}
+};
+
 int main()
 {
+	//std::thread t;
+	
+	size_t num_of_segments = 10;          
+	std::string ma = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\main index\\";
+	std::string me = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\merged index\\";
+	AuxiliaryIndex ai_many(num_of_segments, ma, me);
+	
+	try
+	{
+		Sheduler s("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\testdata\\", 0);
+		std::thread t(&Sheduler::MonitorData, &s);
+	
+		t.join();
+	}
+	catch (const std::exception& e)
+	{
+		std::cout << "ERROR: " << e.what() << std::endl;
+	}
+	
+	
+	
+	//s.printFP();
+	
+	//t.join();
+	/*
 	size_t num_of_segments = 10;          
 	std::string ma = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\main index\\";
 	std::string me = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\merged index\\";
@@ -689,10 +776,6 @@ int main()
 	walkdirs(dirs[2], ai_many);
 	walkdirs(dirs[3], ai_many);
 	
-	//std::cout << "Writing to disk..." << std::endl;
-
-	//ai_many.WriteToDisk(); //importang !!!!!
-	
 	std::cout << "Searching phrase..." << std::endl;
 	
 	std::cout << "Phrase in " << ai_many.ReadPhrase(" (home-made style) (visual) (effects, awkward dialogue,) ") << std::endl;
@@ -700,6 +783,14 @@ int main()
 	std::cout << "Merging..." << std::endl;
 	ai_many.MergeAiWithDisk(4);
 	ai_many.MergeAiWithDisk(4);
+	
+	size_t total = 0;
+	for (size_t i = 0; i < num_of_segments; ++i){
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+		total += ai_many.SegmentSize(i);
+	}
+	std::cout << "Total :" << total << std::endl;
+	*////
 	
 	//std::cout << "Reading from disk..." << std::endl;
 	
@@ -720,12 +811,7 @@ int main()
 	*/
 	
 	
-	size_t total = 0;
-	for (size_t i = 0; i < num_of_segments; ++i){
-		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
-		total += ai_many.SegmentSize(i);
-	}
-	std::cout << "Total :" << total << std::endl;
+
 	
 	return 0;
 }
