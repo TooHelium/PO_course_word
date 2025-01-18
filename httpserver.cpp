@@ -14,6 +14,7 @@
 
 #define PORT 8080
 #define MY_ADDR "192.168.0.100"
+#define LOCAL_HOST "127.0.0.1"
 
 #define HTML_ROOT "index.html"
 #define HTML_SECOND "second.html"
@@ -36,43 +37,67 @@ std::string content_second;
 std::regex path_root("^GET / HTTP/1.1"),
            path_second("^GET /second.html HTTP/1.1");
 
-void SendResponse(int client_socket, const std::string& response) 
+void DecodeUrl(std::string& enc_url)
 {
-    send(client_socket, response.c_str(), response.size(), 0);
+    std::regex space_re("%20|\\+");
+    enc_url = std::regex_replace(enc_url, space_re, " ");
+
+    std::regex quote_re("%27");
+    enc_url = std::regex_replace(enc_url, quote_re, "'");
+
+    std::regex open_parenthesis_re("%28");
+    enc_url = std::regex_replace(enc_url, open_parenthesis_re, "(");
+
+    std::regex close_parenthesis_re("%29");
+    enc_url = std::regex_replace(enc_url, close_parenthesis_re, ")");
 }
 
-void HandleRequest(int client_socket, bool* thread_is_finished) 
+void HandleRequest(int client_socket) 
 {
-    char request[256];
-    int recved = recv(client_socket, request, sizeof(request), 0);
-    if (-1 == recved)
+    const size_t kMaxBufferSize = 512;
+    char request[kMaxBufferSize];
+
+    int recved = recv(client_socket, request, sizeof(request) - 1, 0);
+    
+    if (recved < 1)
     {
         std::cout << "ERROR receiving request from client" << std::endl;
         close(client_socket);
         return;
     }
-
-    std::string httpResponse;
-
-    if (std::regex_search(request, path_root))
+    else if (0 == recved)
     {
-        httpResponse = STATUS_200(content_root);
+        std::cout << "ERROR client closed connection" << std::endl;
+        close(client_socket);
+        return;
     }
-    else if (std::regex_search(request, path_second))
+
+    request[recved] = '\0';
+    std::string request_str(request); 
+    //std::cout << request << std::endl;
+
+    std::string http_response;
+
+    std::regex query_regex("^GET /search\\?query=([^ ]+) HTTP/1.1");
+    std::smatch match;
+
+    if (std::regex_search(request_str, path_root))
+        http_response = STATUS_200(content_root);
+    else if (std::regex_search(request_str, match, query_regex))
     {
-        httpResponse = STATUS_200(content_second);
+        std::string enc_url = match[1].str();
+        DecodeUrl(enc_url);
+
+        std::cout << enc_url << std::endl;
+        //!!!!!!!!!!!!!!!1
     }
     else
-    {
-        httpResponse = STATUS_404;
-    }
+        http_response = STATUS_404;
 
-    SendResponse(client_socket, httpResponse); 
+    send(client_socket, http_response.c_str(), http_response.size(), 0); 
 
-    sleep(1); //in order to let the client to get all the packets
+    sleep(1);
     close(client_socket);
-
-    *thread_is_finished = true;
 }
 
 int main() 
@@ -89,7 +114,7 @@ int main()
         return 1;
     }
 
-    file = std::ifstream(HTML_SECOND, std::ios::in);
+    /*file = std::ifstream(HTML_SECOND, std::ios::in);
     if (file.is_open())
     {
         content_second = std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
@@ -99,11 +124,10 @@ int main()
     {
         std::cerr << "Cannot load HTML content (second)\n";
         return 1;
-    }
+    }*/
     
 
-    int server_socket;
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (-1 == server_socket) 
     {
         std::cerr << "Server socket creation failed\n";
@@ -113,7 +137,7 @@ int main()
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(MY_ADDR);
+    server_addr.sin_addr.s_addr = inet_addr(LOCAL_HOST);
     server_addr.sin_port = htons(PORT);
 
     if (-1 == bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr))) 
@@ -130,7 +154,7 @@ int main()
         return 1;
     }
     
-    std::cout << "Server (" << MY_ADDR << ") listening on port " << PORT << "...\n";
+    std::cout << "Server (" << LOCAL_HOST << ") listening on port " << PORT << "...\n";
 
     while (true) 
     {
@@ -141,6 +165,7 @@ int main()
             continue;
         }
 
+        HandleRequest(client_socket);
         //here must be thread pool 
     }
 
@@ -151,3 +176,12 @@ int main()
 
 
 
+
+
+
+/*
+void SendResponse(int client_socket, const std::string& response) 
+{
+    send(client_socket, response.c_str(), response.size(), 0);
+}
+*/
