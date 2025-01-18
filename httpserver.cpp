@@ -88,7 +88,7 @@ void HandleRequest(int client_socket, AuxiliaryIndex& ai_many)
         std::string enc_url = match[1].str();
         DecodeUrl(enc_url);
         std::string doc_id = std::to_string( ai_many.ReadPhrase(enc_url) );
-
+        
         http_response = STATUS_200(doc_id);
     }
     else

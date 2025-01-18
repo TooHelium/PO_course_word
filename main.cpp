@@ -174,11 +174,19 @@ private:
 		{
 			std::vector<std::vector<PosType>*> pos_vectors;
 			
+			if (terms.size() == 1) //TODO MAYBE MERGE WITH NEXT CODE
+			{
+				auto it = terms[0]->doc_pos_map.find(doc_id);
+				if (it == terms[0]->doc_pos_map.end())
+					return 0;
+				return it->second.size();
+			}
+
 			for (TermInfo* term : terms)
 			{
 				auto it = term->doc_pos_map.find(doc_id);
 				if (it == term->doc_pos_map.end())
-					return 0;//false;
+					return 0;//false; YOU HAVE AN IDEA HERE TO NOT RETURN (search will return for any phare then)
 				pos_vectors.push_back(&(it->second)); //get address of positions pos_vector
 			}			
 			
@@ -304,6 +312,9 @@ public:
 	{
 		std::vector<Phrase> phrases;
 		SplitIntoPhrases(query, phrases);
+
+		if (phrases.empty())
+			return DocIdType(0);
 		
 		std::vector<std::shared_lock<std::shared_mutex>> locks;
 		
@@ -319,10 +330,10 @@ public:
 				if (it != table_[i].end())
 					phrase.terms.push_back( &(it->second) ); //RENAME terms in its struct
 				else
-					return 0;//attention
+					return DocIdType(0);//attention WILL WE RELEASE LOCKS HERE !!!!!!!!!!!!!!!
 			}
 		}
-		
+
 		DocIdType curr_doc_id;
 		DocIdType best_doc_id = 0;
 		size_t curr_score = 0;
@@ -333,19 +344,14 @@ public:
 			
 			curr_score = 0;
 			for (Phrase& phrase : phrases)
-			{
 				curr_score += phrase.FindIn(curr_doc_id);
-				//if (!phrase.FindIn(curr_doc_id))
-					//goto continue_outter_loop;
-			}
 			
 			if (curr_score > max_score)
 			{
 				max_score = curr_score;
 				best_doc_id = curr_doc_id;
 			}
-			
-		//continue_outter_loop:
+			//std::cout << best_doc_id << std::endl; //DELETE TODO
 		}
 		
 		return best_doc_id;
