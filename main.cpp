@@ -19,11 +19,10 @@
 #include <mutex>
 #include <chrono> //for thread to sleep
 
-//#include <queue>
+#include <queue>
 
 #include <set>
 
-#include <atomic>
 #include <unordered_set> //for Sheduler
 
 class AuxiliaryIndex
@@ -128,7 +127,7 @@ private:
 	
 	size_t num_top_doc_ids_ = 5; //can be set in constuctor
 	
-	std::vector<DocIdType> deleted_files_list_;
+	size_t max_segment_size_ = 1000;
 	
 	struct IndexPath
 	{
@@ -377,6 +376,14 @@ public:
 		positions.push_back(term_position);
 		
 		table_[i][term].UpdateRanking( DocFreqEntry{doc_id, positions.size()}, num_top_doc_ids_ ); //maybe make it static for CLASS, eh?
+		
+		if ( table_[i].size() > max_segment_size_ )
+		{
+			std::cout << "START MERGING " << i << " segment";
+			MergeAiWithDisk(i);
+			std::cout << "END MERGED " << i << " segment";
+		}
+		
 	}
 	
 	size_t SegmentSize(size_t i) //TODO syncronization
@@ -470,7 +477,7 @@ public:
 	{
 		//for (size_t i = 0; i < num_segments_; ++i)
 		{
-			std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
+			//std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
 			
 			std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; 
 			std::string merge_filename = indexes_paths_[i].GetMergeIndexPath() + "i" + std::to_string(i) + ".txt"; 
@@ -618,7 +625,7 @@ void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
 	}
 	
 	std::string filename = file_path.stem().string();
-	filename.erase(filename.size() - 2); // erasing '_i' part
+	//filename.erase(filename.size() - 2); // erasing '_i' part !!!!!!!!!!!!!!!!!!!!!!!!!
 	uint32_t doc_id = static_cast<uint32_t>( std::stoul(filename) );
 		
 	uint32_t word_position = 1;
@@ -667,7 +674,6 @@ void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
 	}
 }
 
-
 class Sheduler //TODO i think we need delete code that remove _number part from data file's path
 {
 private:
@@ -677,14 +683,8 @@ private:
 	std::unordered_set<std::string> monitored_dirs_; //directories a Sheduler know about. they are unique
 	
 	std::string ready_dir_marker_ = "___"; // 3 underscores
-	/*struct Task()
-	{
-		auto add_data = [ai_](const std::string& path)
-		{
-			ai_.Write(path);
-		}
-		merge_index
-	}*/
+	
+	std::vector<std::string> tasks_pool_;
 	
 public:
 	Sheduler(const std::string dp, /*AuxiliaryIndex& ai,*/ size_t sleep_duration)
@@ -697,7 +697,7 @@ public:
 		duration_ = std::chrono::seconds( sleep_duration );
 	}
 	
-	void MonitorData()
+	void MonitorData(AuxiliaryIndex& ai)
 	{
 		std::string curr_dir;
 		
@@ -715,10 +715,37 @@ public:
 					{
 						std::cout << "New directory " << curr_dir << std::endl;
 						monitored_dirs_.insert(curr_dir);
+						InspectDir(curr_dir, ai);
 					}
 				}
 			}
 		}
+	}
+	
+	std::string GetPathByDocId(const uint32_t& id)
+	{
+		std::regex id_range_regex("(\\d+)-(\\d+)");
+		std::smatch match;
+		
+		for (const auto& entry : fs::directory_iterator(data_path_))
+		{
+			if (fs::is_directory(entry.path()) && DirIsReady(entry.path()))
+			{
+				std::string tmp = entry.path().stem().string();
+				if (std::regex_search(tmp, match, id_range_regex))
+				{
+					uint32_t min_id = static_cast<uint32_t>( std::stoul(match[1].str()) );
+					uint32_t max_id = static_cast<uint32_t>( std::stoul(match[2].str()) );
+					
+					if (min_id <= id && id <= max_id)
+					{
+						return entry.path().string() + "\\" + std::to_string(id) + ".txt";
+					}
+				}					
+			}
+		}
+		
+		return "none";//path_to_no_file_;
 	}
 	
 	bool DirIsReady(const fs::path& path)
@@ -730,34 +757,62 @@ public:
 		
 		return false;
 	}
+	
+	void InspectDir(const std::string& directory_path, AuxiliaryIndex& ai)
+	{
+		for (const auto& entry : fs::directory_iterator(directory_path))
+		{
+			if (entry.path().extension() == ".txt")
+			{
+				tasks_pool_.push_back(entry.path().string());
+				split(entry.path(), ai);
+			}
+		}
+	}
+	
+	void PrintTasks()
+	{
+		for (auto v : tasks_pool_)
+			std::cout << v << std::endl;
+	}
 };
 
 int main()
 {
-	//std::thread t;
-	
 	size_t num_of_segments = 10;          
 	std::string ma = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\main index\\";
 	std::string me = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\merged index\\";
 	AuxiliaryIndex ai_many(num_of_segments, ma, me);
 	
-	try
-	{
-		Sheduler s("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\testdata\\", 0);
-		std::thread t(&Sheduler::MonitorData, &s);
+	//try
+	//{
+		Sheduler s("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\testdata\\", 1);
+		std::thread t(&Sheduler::MonitorData, &s, std::ref(ai_many));
+		
+		
+		std::this_thread::sleep_for(std::chrono::duration<int>(3));
+		
+	//}
+	//catch (const std::exception& e)
+	//{
+	//	std::cout << "ERROR: " << e.what() << std::endl;
+	//}
 	
-		t.join();
+	
+	
+	std::cout << "Searching phrase..." << std::endl;
+	uint32_t id = ai_many.ReadPhrase(" (fitness enjoy)4 ");
+	std::cout << "Phrase in id " << id << " path: " << s.GetPathByDocId(id) << std::endl;
+	
+	size_t total = 0;
+	for (size_t i = 0; i < num_of_segments; ++i){
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+		total += ai_many.SegmentSize(i);
 	}
-	catch (const std::exception& e)
-	{
-		std::cout << "ERROR: " << e.what() << std::endl;
-	}
-	
-	
-	
-	//s.printFP();
+	std::cout << "Total :" << total << std::endl;
 	
 	//t.join();
+	
 	/*
 	size_t num_of_segments = 10;          
 	std::string ma = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\main index\\";
@@ -780,17 +835,13 @@ int main()
 	
 	std::cout << "Phrase in " << ai_many.ReadPhrase(" (home-made style) (visual) (effects, awkward dialogue,) ") << std::endl;
 	
-	std::cout << "Merging..." << std::endl;
-	ai_many.MergeAiWithDisk(4);
-	ai_many.MergeAiWithDisk(4);
-	
 	size_t total = 0;
 	for (size_t i = 0; i < num_of_segments; ++i){
 		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
 		total += ai_many.SegmentSize(i);
 	}
 	std::cout << "Total :" << total << std::endl;
-	*////
+	*/
 	
 	//std::cout << "Reading from disk..." << std::endl;
 	
