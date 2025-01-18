@@ -739,7 +739,7 @@ public:
 					
 					if (min_id <= id && id <= max_id)
 					{
-						return entry.path().string() + "\\" + std::to_string(id) + ".txt";
+						return entry.path().string() + "/" + std::to_string(id) + ".txt";
 					}
 				}					
 			}
@@ -779,26 +779,18 @@ public:
 
 int main()
 {
+	/*
 	size_t num_of_segments = 10;          
-	std::string ma = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\main index\\";
-	std::string me = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\merged index\\";
+	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
+	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
 	AuxiliaryIndex ai_many(num_of_segments, ma, me);
 	
-	//try
-	//{
-		Sheduler s("C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\testdata\\", 1);
+	
+		Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка/testdata/", 1);
 		std::thread t(&Sheduler::MonitorData, &s, std::ref(ai_many));
 		
 		
-		std::this_thread::sleep_for(std::chrono::duration<int>(3));
-		
-	//}
-	//catch (const std::exception& e)
-	//{
-	//	std::cout << "ERROR: " << e.what() << std::endl;
-	//}
-	
-	
+		std::this_thread::sleep_for(std::chrono::duration<int>(30));
 	
 	std::cout << "Searching phrase..." << std::endl;
 	uint32_t id = ai_many.ReadPhrase(" (fitness enjoy)4 ");
@@ -811,25 +803,34 @@ int main()
 	}
 	std::cout << "Total :" << total << std::endl;
 	
-	//t.join();
+	t.detach();
+	*/
 	
-	/*
+	
 	size_t num_of_segments = 10;          
-	std::string ma = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\main index\\";
-	std::string me = "C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\merged index\\";
+	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
+	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
 	AuxiliaryIndex ai_many(num_of_segments, ma, me);
 	
 	std::string dirs[4] = {
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\1", //2 3 4 1
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\2",
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\3",
-		"C:\\Users\\rudva\\OneDrive\\Desktop\\Test IR\\data\\4"
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/1", //2 3 4 1
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/2",
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/3",
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/4"
 	};
 	
-	walkdirs(dirs[0], ai_many);
-	walkdirs(dirs[1], ai_many);
-	walkdirs(dirs[2], ai_many);
-	walkdirs(dirs[3], ai_many);
+	//walkdirs(dirs[0], ai_many);
+	//walkdirs(dirs[1], ai_many);
+	//walkdirs(dirs[2], ai_many);
+	//walkdirs(dirs[3], ai_many);
+	
+	int t = 4;
+	std::thread writers[t];
+	for (int i = 0; i < t; ++i)
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
+	
+	for (int i = 0; i < t; ++i)
+		writers[i].join();
 	
 	std::cout << "Searching phrase..." << std::endl;
 	
@@ -841,7 +842,7 @@ int main()
 		total += ai_many.SegmentSize(i);
 	}
 	std::cout << "Total :" << total << std::endl;
-	*/
+	
 	
 	//std::cout << "Reading from disk..." << std::endl;
 	
