@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Searching machine</title>
+  <style>
+        body, html 
+        {
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Product Sans';
+            background-color: #b3ecf8;
+        }
+
+        main
+        {
+            text-align: center;
+        }
+
+        #logo 
+        {
+            font-size: 70px;
+            font-weight: bold;
+            margin-bottom: 40px;
+        }
+
+        #search 
+        {
+            display: flex;
+            justify-content: center;  
+            align-items: center;
+        }
+
+        form 
+        {
+            display: flex;
+            gap: 10px;
+        }
+
+        input 
+        {
+            padding: 10px;
+            width: 400px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 18px;
+        }
+
+        button 
+        {
+            padding: 10px 15px;
+            background: blue;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+        }
+  </style>
+</head>
+<body>
+  <main>
+
+    <section id="logo">
+        <strong>
+            <span style="color: #4285F4">1</span>
+            <span style="color: #EA4335">0</span>
+            <sup>
+                <span style="color: #FBBC05">1</span>
+                <span style="color: #4285F4">0</span>
+                <span style="color: #34A853">0</span>
+            </sup>
+        </strong>
+    </section>
+
+    <section id="search">
+        <form action="search.php" method="GET">
+            <input type="text" name="query" placeholder="What do you want?" required>
+            <button type="submit">Search</button>
+        </form>
+    </section>
+
+  </main>
+</body>
+</html>

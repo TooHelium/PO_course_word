@@ -13,7 +13,7 @@
 #include <arpa/inet.h>
 
 #define PORT 8080
-#define MY_ADDR "127.0.0.1"//"192.168.0.104"
+#define MY_ADDR "192.168.0.100"
 
 #define HTML_ROOT "index.html"
 #define HTML_SECOND "second.html"
@@ -36,25 +36,25 @@ std::string content_second;
 std::regex path_root("^GET / HTTP/1.1"),
            path_second("^GET /second.html HTTP/1.1");
 
-void sendResponse(int clientSocket, const std::string& response) 
+void SendResponse(int client_socket, const std::string& response) 
 {
-    send(clientSocket, response.c_str(), response.size(), 0);
+    send(client_socket, response.c_str(), response.size(), 0);
 }
 
-void handleRequest(int clientSocket, bool* thread_is_finished) 
+void HandleRequest(int client_socket, bool* thread_is_finished) 
 {
     char request[256];
-    int recved = recv(clientSocket, request, sizeof(request), 0);
+    int recved = recv(client_socket, request, sizeof(request), 0);
     if (-1 == recved)
     {
         std::cout << "ERROR receiving request from client" << std::endl;
-        close(clientSocket);
+        close(client_socket);
         return;
     }
 
     std::string httpResponse;
 
-    if (std::regex_search(request, path_root)) //non blocking I/O !!!!!!!!!!!!!!!!!
+    if (std::regex_search(request, path_root))
     {
         httpResponse = STATUS_200(content_root);
     }
@@ -67,17 +67,16 @@ void handleRequest(int clientSocket, bool* thread_is_finished)
         httpResponse = STATUS_404;
     }
 
-    sendResponse(clientSocket, httpResponse); 
+    SendResponse(client_socket, httpResponse); 
 
     sleep(1); //in order to let the client to get all the packets
-    close(clientSocket);
+    close(client_socket);
 
     *thread_is_finished = true;
 }
 
 int main() 
 {
-    /*
     std::ifstream file(HTML_ROOT, std::ios::in);
     if (file.is_open()) 
     {
@@ -101,13 +100,13 @@ int main()
         std::cerr << "Cannot load HTML content (second)\n";
         return 1;
     }
-    */
+    
 
     int server_socket;
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (-1 == server_socket) 
     {
-        std::cerr << "Socket creation failed\n";
+        std::cerr << "Server socket creation failed\n";
         return 1;
     }
 
@@ -117,62 +116,35 @@ int main()
     server_addr.sin_addr.s_addr = inet_addr(MY_ADDR);
     server_addr.sin_port = htons(PORT);
 
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) 
+    if (-1 == bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr))) 
     {
         std::cerr << "Bind failed\n";
         close(server_socket);
         return 1;
     }
 
-    if (listen(server_socket, 120) == -1) 
+    if (-1 == listen(server_socket, 5)) 
     {
         std::cerr << "Listen failed\n";
         close(server_socket);
         return 1;
     }
     
-    std::cout << "Server listening on port " << PORT << "...\n";
-    
-    //std::vector<std::pair<bool*, std::thread>> clients;
+    std::cout << "Server (" << MY_ADDR << ") listening on port " << PORT << "...\n";
 
     while (true) 
     {
-        int clientSocket = accept(server_socket, NULL, NULL);
-        if (-1 == clientSocket) 
+        int client_socket = accept(server_socket, NULL, NULL);
+        if (-1 == client_socket) 
         {
             std::cerr << "Accept failed\n";
             continue;
         }
 
-        /*
-        //better to use std::jthread
-        bool* thread_is_finished = new bool(false);
-        std::thread t(handleRequest, clientSocket, thread_is_finished);
-        clients.emplace_back(thread_is_finished, std::move(t));
-
-        for (auto client = clients.begin(); client != clients.end();)
-        {
-            if (*(client->first))
-            {
-                if (client->second.joinable())
-                {
-                    client->second.join();
-                    delete client->first;
-                    client = clients.erase(client);
-                    continue;
-                }
-            }
-            
-            ++client;
-        }
-
-        std::cout << clients.size() << std::endl;
-        */
+        //here must be thread pool 
     }
 
     close(server_socket);
-
-    //clients.clear();
     
     return 0;
 }
