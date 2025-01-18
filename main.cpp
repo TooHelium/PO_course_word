@@ -817,7 +817,7 @@ int main()
 		"/home/dima/Desktop/БІС/test IR/Новая папка/data/2",
 		"/home/dima/Desktop/БІС/test IR/Новая папка/data/3",
 		"/home/dima/Desktop/БІС/test IR/Новая папка/data/4"
-	};
+	}; 
 	
 	//walkdirs(dirs[0], ai_many);
 	//walkdirs(dirs[1], ai_many);
