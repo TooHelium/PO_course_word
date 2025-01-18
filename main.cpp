@@ -777,8 +777,40 @@ public:
 	}
 };
 
-int main()
+void run(AuxiliaryIndex& ai_many)
 {
+	size_t num_of_segments = 10;          
+	//std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
+	//std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
+	//AuxiliaryIndex ai_many(num_of_segments, ma, me);
+
+	std::string dirs[4] = {
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/1", //2 3 4 1
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/2",
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/3",
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/4"
+	};
+
+	int t = 4;
+	std::thread writers[t];
+	for (int i = 0; i < t; ++i)
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
+	
+	for (int i = 0; i < t; ++i)
+		writers[i].join();
+
+	size_t total = 0;
+	for (size_t i = 0; i < num_of_segments; ++i){
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+		total += ai_many.SegmentSize(i);
+	}
+	std::cout << "Total :" << total << std::endl;
+
+	while (1) { };
+}
+
+//int main()
+//{
 	/*
 	size_t num_of_segments = 10;          
 	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
@@ -806,7 +838,7 @@ int main()
 	t.detach();
 	*/
 	
-	
+	/*
 	size_t num_of_segments = 10;          
 	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
 	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
@@ -842,7 +874,7 @@ int main()
 		total += ai_many.SegmentSize(i);
 	}
 	std::cout << "Total :" << total << std::endl;
-	
+	*/
 	
 	//std::cout << "Reading from disk..." << std::endl;
 	
@@ -865,5 +897,5 @@ int main()
 	
 
 	
-	return 0;
-}
+	//return 0;
+//}

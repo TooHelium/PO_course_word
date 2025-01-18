@@ -12,6 +12,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "main.cpp"
+
 #define PORT 8080
 #define MY_ADDR "192.168.0.100"
 #define LOCAL_HOST "127.0.0.1"
@@ -52,7 +54,7 @@ void DecodeUrl(std::string& enc_url)
     enc_url = std::regex_replace(enc_url, close_parenthesis_re, ")");
 }
 
-void HandleRequest(int client_socket) 
+void HandleRequest(int client_socket, AuxiliaryIndex& ai_many) 
 {
     const size_t kMaxBufferSize = 512;
     char request[kMaxBufferSize];
@@ -74,10 +76,8 @@ void HandleRequest(int client_socket)
 
     request[recved] = '\0';
     std::string request_str(request); 
-    //std::cout << request << std::endl;
 
     std::string http_response;
-
     std::regex query_regex("^GET /search\\?query=([^ ]+) HTTP/1.1");
     std::smatch match;
 
@@ -87,9 +87,9 @@ void HandleRequest(int client_socket)
     {
         std::string enc_url = match[1].str();
         DecodeUrl(enc_url);
+        std::string doc_id = std::to_string( ai_many.ReadPhrase(enc_url) );
 
-        std::cout << enc_url << std::endl;
-        //!!!!!!!!!!!!!!!1
+        http_response = STATUS_200(doc_id);
     }
     else
         http_response = STATUS_404;
@@ -102,6 +102,14 @@ void HandleRequest(int client_socket)
 
 int main() 
 {
+    size_t num_of_segments = 10;          
+	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
+	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
+	AuxiliaryIndex ai_many(num_of_segments, ma, me);
+
+    std::thread t(run, std::ref(ai_many));
+    t.detach();
+
     std::ifstream file(HTML_ROOT, std::ios::in);
     if (file.is_open()) 
     {
@@ -165,7 +173,7 @@ int main()
             continue;
         }
 
-        HandleRequest(client_socket);
+        HandleRequest(client_socket, std::ref(ai_many));
         //here must be thread pool 
     }
 
