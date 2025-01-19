@@ -6,7 +6,6 @@
 
 int main() 
 {	
-
 	std::ifstream file2("msg.txt");
 	if (!file2.is_open())
 	{
@@ -23,7 +22,7 @@ int main()
 	
 	std::cout << "End " << right << std::endl;
 	
-	std::string target = "oyster";
+	std::string target = "apple";
 	
 	std::regex line_re("(\\w+)");
 	std::smatch match;

@@ -435,14 +435,79 @@ public:
 		}
 	}
 	
-	DocIdType ReadFromDiskIndex(const std::string& term) //TODO
+	DocIdType ReadFromDiskIndexLog(const std::string& term) //TODO
 	{
 		size_t i = GetSegmentIndex(term);
 		
 		std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; //change path to main index
 			
 		std::ifstream file(index_filename);
+
+		int counter = 0; //DELETE TODO
+
+		if (!file)
+		{
+			std::cout << "Error opening file (index) " << index_filename << std::endl;
+		}
+		else
+		{
+			std::regex term_regex("^([^ ]+):\\[([0-9,]+)\\]");
+			std::smatch match;
+			std::string line;
+			std::string tmp;
+
+			uint64_t left = 0;
+			file.seekg(0, std::ios::end);
+			uint64_t right = static_cast<uint64_t>( file.tellg() );
+			uint64_t mid;
+
+			while(left <= right)
+			{
+				mid = (left + right) / 2;
+				file.seekg(mid);
+				
+				while (file.tellg() > 0 && file.peek() != '\n')
+					file.seekg(file.tellg() - static_cast<std::streamoff>(1));
 		
+				if (file.peek() == '\n')
+					file.seekg(file.tellg() + static_cast<std::streamoff>(1));
+				
+			
+				auto start = file.tellg(); //or mid
+				std::getline(file, line);
+				if (std::regex_search(line, match, term_regex)){
+					tmp = match[1].str();
+					std::cout << tmp << std::endl;}
+					
+				if (term < tmp)
+					right = mid - 1;
+				else if (term > tmp)
+					left = mid + 1;
+				else
+				{
+					file.close();
+					return static_cast<DocIdType>( std::stoul(match[2].str()) ); //returns the top 1 only
+				}
+			}
+			file.close();
+			
+			return DocIdType(0);
+		}
+
+		return DocIdType(0);
+	}
+
+	
+	DocIdType ReadFromDiskIndexLin(const std::string& term) //TODO
+	{
+		size_t i = GetSegmentIndex(term);
+		
+		std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; //change path to main index
+			
+		std::ifstream file(index_filename);
+
+		int counter = 0; //DELETE TODO
+
 		if (!file)
 		{
 			std::cout << "Error opening file (index) " << index_filename << std::endl;
@@ -452,9 +517,10 @@ public:
 			std::string line;
 			std::regex term_regex("^" + term + ":\\[([0-9,]+)\\]");
 			std::smatch match;
-			
+
 			while (std::getline(file, line))
 			{
+				++counter; //DELETE TODO
 				if (std::regex_search(line, match, term_regex)) 
 				{
 					std::string nums = match[1].str();
@@ -468,16 +534,17 @@ public:
 
 					for (std::sregex_iterator ri = first_num; ri != last_num; ++ri)
 						res_doc_ids.push_back(static_cast<DocIdType>( std::stoul(ri->str())));
-
+					std::cout << "Counter " << counter << std::endl;//delete TOOD
 					return res_doc_ids[0]; //!!!! NOW I ONLY RETURN TOP 1 element
 				}
 			}
 		}
-		
+		std::cout << "Counter " << counter << std::endl; //DELETE TODO
 		file.close(); //maybe delete?
 		
 		return 0; //of DocIdType
 	}
+	
 	
 	void MergeAiWithDisk(size_t i) //TODO
 	{
@@ -783,6 +850,7 @@ public:
 	}
 };
 
+/*
 void run(AuxiliaryIndex& ai_many)
 {
 	size_t num_of_segments = 10;          
@@ -814,9 +882,9 @@ void run(AuxiliaryIndex& ai_many)
 
 	while (1) { };
 }
-
-//int main()
-//{
+*/
+int main()
+{
 	/*
 	size_t num_of_segments = 10;          
 	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
@@ -844,7 +912,7 @@ void run(AuxiliaryIndex& ai_many)
 	t.detach();
 	*/
 	
-	/*
+	
 	size_t num_of_segments = 10;          
 	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
 	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
@@ -874,13 +942,20 @@ void run(AuxiliaryIndex& ai_many)
 	
 	std::cout << "Phrase in " << ai_many.ReadPhrase(" (home-made style) (visual) (effects, awkward dialogue,) ") << std::endl;
 	
+	ai_many.MergeAiWithDisk(4);
+
 	size_t total = 0;
 	for (size_t i = 0; i < num_of_segments; ++i){
 		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
 		total += ai_many.SegmentSize(i);
 	}
 	std::cout << "Total :" << total << std::endl;
-	*/
+
+	//std::cout << ai_many.ReadFromDiskIndexLin("and") << std::endl;
+
+	std::cout << ai_many.ReadFromDiskIndexLog("anytime") << std::endl;
+	std::cout << ai_many.ReadFromDiskIndexLog("amelioration") << std::endl;
+	std::cout << ai_many.ReadFromDiskIndexLog("9") << std::endl;
 	
 	//std::cout << "Reading from disk..." << std::endl;
 	
@@ -903,5 +978,5 @@ void run(AuxiliaryIndex& ai_many)
 	
 
 	
-	//return 0;
-//}
+	return 0;
+}
