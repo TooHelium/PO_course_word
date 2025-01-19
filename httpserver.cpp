@@ -41,17 +41,26 @@ std::regex path_root("^GET / HTTP/1.1"),
 
 void DecodeUrl(std::string& enc_url)
 {
-    std::regex space_re("%20|\\+");
-    enc_url = std::regex_replace(enc_url, space_re, " ");
+    std::regex space_regex("%20|\\+");
+    enc_url = std::regex_replace(enc_url, space_regex, " ");
 
-    std::regex quote_re("%27");
-    enc_url = std::regex_replace(enc_url, quote_re, "'");
+    std::regex double_quote_regex("%22");
+    enc_url = std::regex_replace(enc_url, double_quote_regex, "\"");
 
-    std::regex open_parenthesis_re("%28");
-    enc_url = std::regex_replace(enc_url, open_parenthesis_re, "(");
+    std::regex quote_regex("%27");
+    enc_url = std::regex_replace(enc_url, quote_regex, "'");
 
-    std::regex close_parenthesis_re("%29");
-    enc_url = std::regex_replace(enc_url, close_parenthesis_re, ")");
+    std::regex open_parenthesis_regex("%28");
+    enc_url = std::regex_replace(enc_url, open_parenthesis_regex, "(");
+
+    std::regex close_parenthesis_regex("%29");
+    enc_url = std::regex_replace(enc_url, close_parenthesis_regex, ")");
+    
+    std::regex comma_regex("%2C");
+    enc_url = std::regex_replace(enc_url, comma_regex, ",");
+
+    std::regex dot_regex("%2E");
+    enc_url = std::regex_replace(enc_url, dot_regex, ".");
 }
 
 void HandleRequest(int client_socket, AuxiliaryIndex& ai_many) 

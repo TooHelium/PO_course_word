@@ -366,7 +366,7 @@ public:
 			}
 		}
 
-		return ai_best_doc_id;
+		//return ai_best_doc_id;
 
 		//Disk best score
 		//curr_doc_id;
@@ -444,7 +444,7 @@ public:
 				if (std::regex_search(line, match, term_regex))
 				{
 					tmp = match[1].str();
-					std::cout << tmp << std::endl;
+					//std::cout << tmp << std::endl;
 				}
 					
 				if (term < tmp)
@@ -988,7 +988,7 @@ public:
 	}
 };
 
-/*
+
 void run(AuxiliaryIndex& ai_many)
 {
 	size_t num_of_segments = 10;          
@@ -1007,7 +1007,6 @@ void run(AuxiliaryIndex& ai_many)
 	std::thread writers[t];
 	for (int i = 0; i < t; ++i)
 		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
-	
 	for (int i = 0; i < t; ++i)
 		writers[i].join();
 
@@ -1018,12 +1017,29 @@ void run(AuxiliaryIndex& ai_many)
 	}
 	std::cout << "Total :" << total << std::endl;
 
+
+	for (int i = 0; i < 10; ++i)
+		ai_many.MergeAiWithDisk(i);
+
+
+	for (int i = 0; i < t; ++i)
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
+	for (int i = 0; i < t; ++i)
+		writers[i].join();
+
+	total = 0;
+	for (size_t i = 0; i < num_of_segments; ++i){
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+		total += ai_many.SegmentSize(i);
+	}
+	std::cout << "Total :" << total << std::endl;
+
 	while (1) { };
 }
-*/
+/*
 int main()
 {
-	/*
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	size_t num_of_segments = 10;          
 	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
 	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
@@ -1048,9 +1064,9 @@ int main()
 	std::cout << "Total :" << total << std::endl;
 	
 	t.detach();
-	*/
 	
 	
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	size_t num_of_segments = 10;          
 	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
 	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
@@ -1075,12 +1091,6 @@ int main()
 	
 	for (int i = 0; i < t; ++i)
 		writers[i].join();
-	
-	std::cout << "Searching phrase..." << std::endl;
-	
-	std::cout << "Phrase in " << ai_many.ReadPhrase(" (home-made style) (visual) (effects, awkward dialogue,) ") << std::endl;
-	
-	ai_many.MergeAiWithDisk(4);
 
 	size_t total = 0;
 	for (size_t i = 0; i < num_of_segments; ++i){
@@ -1088,12 +1098,35 @@ int main()
 		total += ai_many.SegmentSize(i);
 	}
 	std::cout << "Total :" << total << std::endl;
+	
+	std::cout << "Searching phrase before mearging..." << std::endl;
+	std::cout << "Phrase in " << ai_many.ReadPhrase(" (home-made style) (visual) (effects, awkward dialogue,) ") << std::endl;
+	
+	for (int i = 0; i < 10; ++i)
+		ai_many.MergeAiWithDisk(i);
+
+	for (int i = 0; i < t; ++i)
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
+	for (int i = 0; i < t; ++i)
+		writers[i].join();
+
+	total = 0;
+	for (size_t i = 0; i < num_of_segments; ++i){
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+		total += ai_many.SegmentSize(i);
+	}
+	std::cout << "Total :" << total << std::endl;
+
+	std::cout << "Searching phrase after mearging..." << std::endl;
+	std::cout << "Phrase in " << ai_many.ReadPhrase(" (home-made style) (visual) (effects, awkward dialogue,) ") << std::endl;
 
 	//std::cout << ai_many.ReadFromDiskIndexLin("and") << std::endl;
 
-	std::cout << ai_many.ReadFromDiskIndexLog("anytime") << std::endl;
-	std::cout << ai_many.ReadFromDiskIndexLog("amelioration") << std::endl;
-	std::cout << ai_many.ReadFromDiskIndexLog("9") << std::endl;
+	//std::cout << ai_many.ReadFromDiskIndexLog("anytime") << std::endl;
+	//std::cout << ai_many.ReadFromDiskIndexLog("amelioration") << std::endl;
+	//std::cout << ai_many.ReadFromDiskIndexLog("9") << std::endl;
+
+	
 	
 	//std::cout << "Reading from disk..." << std::endl;
 	
@@ -1116,5 +1149,5 @@ int main()
 	
 
 	
-	return 0;
-}
+	//return 0;
+//}
