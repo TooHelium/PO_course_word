@@ -6,6 +6,11 @@
 
 int main() 
 {	
+
+
+
+
+
 	std::ifstream file2("msg.txt");
 	if (!file2.is_open())
 	{

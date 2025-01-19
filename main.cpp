@@ -167,10 +167,11 @@ private:
 	struct Phrase
 	{
 		std::vector<TermType> words;
-		std::vector<TermInfo*> terms; //we can not have vectors of reference in simple way RENAME
+		std::vector<TermInfo*> ai_terms; //we can not have vectors of reference in simple way RENAME
+		std::vector<TermInfo*> disk_terms;
 		size_t distance;
 		
-		size_t FindIn(DocIdType doc_id) //somehow we need to make them wait for each other
+		size_t FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms) //somehow we need to make them wait for each other
 		{
 			std::vector<std::vector<PosType>*> pos_vectors;
 			
@@ -311,6 +312,8 @@ public:
 	DocIdType ReadPhrase(const std::string& query)
 	{
 		std::vector<Phrase> phrases;
+		TermsTable phrases_disk_table;
+
 		SplitIntoPhrases(query, phrases);
 
 		if (phrases.empty())
@@ -328,36 +331,173 @@ public:
 				//acquired_segments.insert(i);
 				auto it = table_[i].find(word);
 				if (it != table_[i].end())
-					phrase.terms.push_back( &(it->second) ); //RENAME terms in its struct
+					phrase.ai_terms.push_back( &(it->second) ); //RENAME terms in its struct
 				else
 					return DocIdType(0);//attention WILL WE RELEASE LOCKS HERE !!!!!!!!!!!!!!!
+
+				if ( !ReadTermInfoFromDiskLog(word, phrases_disk_table) )
+					return DocIdType(0);
+
+				it = phrases_disk_table.find(word);
+				if (it != phrases_disk_table.end())
+					phrase.disk_terms.push_back( &(it->second) );
+				else
+					return DocIdType(0); 
 			}
 		}
 
+		//AI best score
 		DocIdType curr_doc_id;
-		DocIdType best_doc_id = 0;
+		DocIdType ai_best_doc_id = 0;
 		size_t curr_score = 0;
 		size_t max_score = curr_score;
-		for (const auto& pair : phrases[0].terms[0]->doc_pos_map)
+		for (const auto& pair : phrases[0].ai_terms[0]->doc_pos_map)
 		{	
 			curr_doc_id = pair.first;
 			
 			curr_score = 0;
 			for (Phrase& phrase : phrases)
-				curr_score += phrase.FindIn(curr_doc_id);
+				curr_score += phrase.FindIn(curr_doc_id, phrase.ai_terms);
 			
 			if (curr_score > max_score)
 			{
 				max_score = curr_score;
-				best_doc_id = curr_doc_id;
+				ai_best_doc_id = curr_doc_id;
 			}
-			//std::cout << best_doc_id << std::endl; //DELETE TODO
 		}
+
+		return ai_best_doc_id;
+
+		//Disk best score
+		//curr_doc_id;
+		DocIdType disk_best_doc_id = 0;
+		curr_score = 0;
+		max_score = curr_score;
+		for (const auto& pair : phrases[0].disk_terms[0]->doc_pos_map)
+		{	
+			curr_doc_id = pair.first;
+			
+			curr_score = 0;
+			for (Phrase& phrase : phrases)
+				curr_score += phrase.FindIn(curr_doc_id, phrase.disk_terms);
+			
+			if (curr_score > max_score)
+			{
+				max_score = curr_score;
+				disk_best_doc_id = curr_doc_id;
+			}
+		}
+
+		std::cout << "ai_best_doc_id " << ai_best_doc_id << std::endl;
+		std::cout << "disk_best_doc_id " << disk_best_doc_id << std::endl; 
+
+		return ai_best_doc_id > disk_best_doc_id ? ai_best_doc_id : disk_best_doc_id;
 		
-		return best_doc_id;
-		
+
+		//now go to disk until segments are locked
+
 		//release the locks
 	}
+
+	bool ReadTermInfoFromDiskLog(const std::string& term, TermsTable& phrases_disk_table) //TODO
+	{
+		if ( phrases_disk_table.find(term) != phrases_disk_table.end() )
+			return true;
+		
+		size_t i = GetSegmentIndex(term);
+		
+		std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; //change path to main index
+			
+		std::ifstream file(index_filename);
+
+		int counter = 0; //DELETE TODO
+
+		if (!file)
+		{
+			std::cout << "Error opening file (index) " << index_filename << std::endl;
+		}
+		else
+		{
+			std::regex term_regex("^([^ ]+):\\[([0-9,]+)\\]([^\\s\\n]+)$");
+			std::smatch match;
+			std::string line;
+			std::string tmp;
+
+			uint64_t left = 0;
+			file.seekg(0, std::ios::end);
+			uint64_t right = static_cast<uint64_t>( file.tellg() );
+			uint64_t mid;
+
+			while(left <= right)
+			{
+				mid = (left + right) / 2;
+				file.seekg(mid);
+				
+				while (file.tellg() > 0 && file.peek() != '\n')
+					file.seekg(file.tellg() - static_cast<std::streamoff>(1));
+		
+				if (file.peek() == '\n')
+					file.seekg(file.tellg() + static_cast<std::streamoff>(1));
+				
+				auto start = file.tellg(); //or mid
+				std::getline(file, line);
+				if (std::regex_search(line, match, term_regex))
+				{
+					tmp = match[1].str();
+					std::cout << tmp << std::endl;
+				}
+					
+				if (term < tmp)
+					right = mid - 1;
+				else if (term > tmp)
+					left = mid + 1;
+				else
+				{
+					std::string curr = match[3].str();
+
+					//std::vector<std::pair<DocIdType, std::vector<PosType>>> term_info;
+
+					std::regex doc_pos_regex("([\\d]+)=\\d+(,\\d+)+;");
+					std::regex num_regex("[0-9]+");
+            		
+					std::string nums;
+					DocIdType doc_id;
+					PosType pos;
+
+					for (std::sregex_iterator it(curr.begin(), curr.end(), doc_pos_regex), last; it != last; ++it)
+					{
+						nums = it->str();
+					
+						std::sregex_iterator ri(nums.begin(), nums.end(), num_regex), last_num;
+						doc_id = static_cast<DocIdType>( std::stoul(ri->str()) );
+						++++ri; //pass frequency
+						pos = static_cast<PosType>( std::stoul(ri->str()) );
+
+						std::vector<PosType>& positions = phrases_disk_table[term].doc_pos_map[doc_id];
+						positions.push_back(pos);
+
+						while ( ++ri != last_num )
+							positions.push_back( static_cast<PosType>( std::stoul(ri->str()) ) );
+						//term_info.push_back( {doc_id, {pos}} );
+						
+						//while ( ++ri != last_num )
+						//	term_info[term_info.size() - 1].second.push_back( static_cast<int>( std::stoul(ri->str()) ) ); 
+					}
+					
+					file.close();
+					//return term_info; 
+					return true;
+				}
+			}
+			file.close();
+			
+			return false;
+		}
+
+		return false;
+	}
+
+
 
 	DocIdType Read(const TermType& term) 
 	{
@@ -497,7 +637,6 @@ public:
 		return DocIdType(0);
 	}
 
-	
 	DocIdType ReadFromDiskIndexLin(const std::string& term) //TODO
 	{
 		size_t i = GetSegmentIndex(term);
@@ -544,7 +683,6 @@ public:
 		
 		return 0; //of DocIdType
 	}
-	
 	
 	void MergeAiWithDisk(size_t i) //TODO
 	{
