@@ -22,7 +22,6 @@
 #define LOCAL_HOST "127.0.0.1"
 
 #define HTML_ROOT "index.html"
-#define HTML_SECOND "second.html"
 
 #define STATUS_404 ("HTTP/1.1 404 Not Found\r\n" \
                     "Content-Type: text/html; charset=UTF-8\r\n" \
@@ -44,14 +43,10 @@
 
 
 std::string content_root;
-std::string content_second;
-
-std::regex path_root("^GET / HTTP/1.1");
-std::regex path_second("^GET /second.html HTTP/1.1");
 
 using DecodeRule = std::pair<std::regex, std::string>;
 
-std::vector<DecodeRule> url_decoding_map = { //TODO RENAME DUE TO GOOGLE CONVENTIONS
+std::vector<DecodeRule> url_decoding_map = {
      {std::regex("%20|\\+"), " "},
      {std::regex("%22"), "\""}, 
      {std::regex("%27"), "'"}, 
@@ -76,14 +71,12 @@ void HandleRequest(int& client_socket, AuxiliaryIndex& ai_many, Sheduler& shedul
     
     if (recved < 1)
     {
-        std::cout << "ERROR receiving request from client" << std::endl;
-        close(client_socket);
+        close(client_socket); //std::cout << "ERROR receiving request from client" << std::endl;
         return;
     }
     else if (0 == recved)
     {
-        std::cout << "ERROR client closed connection" << std::endl;
-        close(client_socket);
+        close(client_socket); //std::cout << "ERROR client closed connection" << std::endl;
         return;
     }
 
@@ -91,6 +84,7 @@ void HandleRequest(int& client_socket, AuxiliaryIndex& ai_many, Sheduler& shedul
     std::string request_str(request); 
 
     std::string http_response;
+    std::regex path_root("^GET / HTTP/1.1");
     std::regex query_regex("^GET /search\\?query=([^ ]+) HTTP/1.1");
     std::smatch match;
 
@@ -199,31 +193,15 @@ int main()
     {
         int client_socket = accept(server_socket, NULL, NULL);
         if (-1 == client_socket) 
-        {
-            std::cerr << "Accept failed\n";
-            continue;
-        }
+            continue; //std::cerr << "Accept failed\n";
+
 
         (void) pool.submit_task([&client_socket, &ai_many, &s] {
             HandleRequest(client_socket, std::ref(ai_many), std::ref(s));
         }, BS::pr::high);
-
-        //here must be thread pool 
     }
 
     close(server_socket);
     
     return 0;
 }
-
-
-
-
-
-
-/*
-void SendResponse(int client_socket, const std::string& response) 
-{
-    send(client_socket, response.c_str(), response.size(), 0);
-}
-*/

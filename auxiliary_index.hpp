@@ -43,7 +43,7 @@ private:
 	{
     public:
 		DescFreqRanking desc_freq_ranking;
-		std::map<DocIdType, std::vector<PosType>> doc_pos_map; //maybe add some initialization
+		std::map<DocIdType, std::vector<PosType>> doc_pos_map;
 		
     public:
 		std::string RankingToString();

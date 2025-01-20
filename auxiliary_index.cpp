@@ -538,64 +538,52 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string
 {
     size_t i = GetSegmentIndex(term);
     
-    std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; //change path to main index
+    std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt";
         
     std::ifstream file(index_filename);
 
-    int counter = 0; //DELETE TODO
-
     if (!file)
     {
-        std::cout << "Error opening file (index) " << index_filename << std::endl;
-    }
-    else
-    {
-        std::regex term_regex("^([^ ]+):\\[([0-9,]+)\\]");
-        std::smatch match;
-        std::string line;
-        std::string tmp;
-
-        uint64_t left = 0;
-        file.seekg(0, std::ios::end);
-        uint64_t right = static_cast<uint64_t>( file.tellg() );
-        uint64_t mid;
-
-        while(left <= right)
-        {
-            mid = (left + right) / 2;
-            file.seekg(mid);
-            
-            while (file.tellg() > 0 && file.peek() != '\n')
-                file.seekg(file.tellg() - static_cast<std::streamoff>(1));
-    
-            if (file.peek() == '\n')
-                file.seekg(file.tellg() + static_cast<std::streamoff>(1));
-            
-        
-            auto start = file.tellg(); //or mid
-            std::getline(file, line);
-            if (std::regex_search(line, match, term_regex)){
-                tmp = match[1].str();
-                std::cout << tmp << std::endl;}
-                
-            if (term < tmp)
-                right = mid - 1;
-            else if (term > tmp)
-                left = mid + 1;
-            else
-            {
-                file.close();
-                return static_cast<DocIdType>( std::stoul(match[2].str()) ); //returns the top 1 only
-            }
-        }
-        file.close();
-        
+        std::cerr << "Error opening file (index) " << index_filename << std::endl;
         return DocIdType(0);
     }
 
+    std::regex term_regex("^([^ ]+):\\[([0-9,]+)\\]");
+    std::smatch match;
+    std::string line;
+    std::string tmp;
+
+    uint64_t left = 0;
+    file.seekg(0, std::ios::end);
+    uint64_t right = static_cast<uint64_t>( file.tellg() );
+    uint64_t mid;
+
+    while(left <= right)
+    {
+        mid = (left + right) / 2;
+        file.seekg(mid);
+        
+        while (file.tellg() > 0 && file.peek() != '\n')
+            file.seekg(file.tellg() - static_cast<std::streamoff>(1));
+
+        if (file.peek() == '\n')
+            file.seekg(file.tellg() + static_cast<std::streamoff>(1));
+        
+        auto start = file.tellg();
+        std::getline(file, line);
+        if (std::regex_search(line, match, term_regex))
+            tmp = match[1].str();
+            
+        if (term < tmp)
+            right = mid - 1;
+        else if (term > tmp)
+            left = mid + 1;
+        else
+            return static_cast<DocIdType>( std::stoul(match[2].str()) ); //returns the top 1 only
+    }
+    
     return DocIdType(0);
 }
-
 
 
 void AuxiliaryIndex::MergeAiWithDisk(size_t i) //TODO
@@ -606,142 +594,142 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //TODO
     std::ifstream ma_file(index_filename);
     std::ofstream me_file(merge_filename);
     
-    if (!ma_file && !me_file)
+    if (!ma_file || !me_file)
     {
-        std::cerr << "Error opening files (ma, me)" << std::endl;
+        std::cerr << "ERROR merging files:\n";
+
+        if (!ma_file) std::cerr << "ma: " << index_filename << '\n';
+        if (!ma_file) std::cerr << "me: " << merge_filename << '\n';
+
+        table_[i].clear(); //TODO NOT SURE ABOUT THIS
+
+        return;
     }
-    else
+    
+    std::vector<TermType> terms;
+    terms.reserve( table_[i].size() );
+    
+    for (const auto& pair : table_[i])
+        terms.push_back(pair.first);
+    
+    std::sort(terms.begin(), terms.end()); //terms are sorted
+    auto terms_it = terms.begin();
+    auto terms_end = terms.end();
+    
+    std::string line;
+    std::regex term_regex("^(.+):"); //"\\w+(['-]\\w+)*" maybe to use this?
+    std::regex term_info_regex("\\d+=\\d+,[^;]+;"); //be cautious, my friend
+    std::regex doc_freq_regex("(\\d+)=(\\d+)");
+    std::smatch match;
+    
+    while (std::getline(ma_file, line))
     {
-        std::vector<TermType> terms;
-        terms.reserve( table_[i].size() );
-        
-        for (const auto& pair : table_[i])
-            terms.push_back(pair.first);
-        
-        std::sort(terms.begin(), terms.end()); //terms are sorted
-        auto terms_it = terms.begin();
-        auto terms_end = terms.end();
-        
-        std::string line;
-        std::regex term_regex("^(.+):"); //"\\w+(['-]\\w+)*" maybe to use this?
-        std::regex term_info_regex("\\d+=\\d+,[^;]+;"); //be cautious, my friend
-        std::regex doc_freq_regex("(\\d+)=(\\d+)");
-        std::smatch match;
-        
-        while (std::getline(ma_file, line))
+        if (terms_it == terms_end)
         {
-            //maybe add regex check on correct line?
-            if (terms_it == terms_end)
+            me_file << line << std::endl;
+            continue;
+        }
+        
+        if (std::regex_search(line, match, term_regex))
+        {
+            while (terms_it != terms_end && *terms_it < match[1].str())
+            {
+                me_file << *terms_it << ":" 
+                        << table_[i][*terms_it].RankingToString() 
+                        << table_[i][*terms_it].MapToString() << std::endl;
+                ++terms_it;
+            }
+            if (terms_it == terms_end || *terms_it > match[1].str())
             {
                 me_file << line << std::endl;
                 continue;
             }
-            
-            if (std::regex_search(line, match, term_regex))
-            {
-                while (terms_it != terms_end && *terms_it < match[1].str())
-                {
-                    me_file << *terms_it << ":" 
-                            << table_[i][*terms_it].RankingToString() 
-                            << table_[i][*terms_it].MapToString() << std::endl;
-                    ++terms_it;
-                }
-                if (terms_it == terms_end || *terms_it > match[1].str())
-                {
-                    me_file << line << std::endl;
-                    continue;
-                }
-                else //if they equal
-                {							
-                    me_file << *terms_it << ":";
-                    
-                    std::ostringstream oss;
-                    std::ostringstream oss_freq;
-                    
-                    TermInfo& merged_term = table_[i][*terms_it];
-                    auto m_it = merged_term.doc_pos_map.begin();
-                    auto m_end = merged_term.doc_pos_map.end();
-                    
-                    auto begin = std::sregex_iterator(line.begin(), line.end(), term_info_regex);
-                    auto end = std::sregex_iterator();
-                    std::smatch df_match_d;
-                    
-                    std::string tmp;
-                    DocIdType line_doc_id;
-                    bool skip_line_insert;
-                    for (auto it = begin; it != end; ++it)
-                    {	
-                        tmp = it->str();
-                        skip_line_insert = false;
+            else //if they equal
+            {							
+                me_file << *terms_it << ":";
+                
+                std::ostringstream oss;
+                std::ostringstream oss_freq;
+                
+                TermInfo& merged_term = table_[i][*terms_it];
+                auto m_it = merged_term.doc_pos_map.begin();
+                auto m_end = merged_term.doc_pos_map.end();
+                
+                auto begin = std::sregex_iterator(line.begin(), line.end(), term_info_regex);
+                auto end = std::sregex_iterator();
+                std::smatch df_match_d;
+                
+                std::string tmp;
+                DocIdType line_doc_id;
+                bool skip_line_insert;
+                for (auto it = begin; it != end; ++it)
+                {	
+                    tmp = it->str();
+                    skip_line_insert = false;
 
-                        if (std::regex_search(tmp, df_match_d, doc_freq_regex))
+                    if (std::regex_search(tmp, df_match_d, doc_freq_regex))
+                    {
+                        line_doc_id = static_cast<DocIdType>( std::stoul(df_match_d[1].str()) );
+                        while (m_it != m_end)
                         {
-                            line_doc_id = static_cast<DocIdType>( std::stoul(df_match_d[1].str()) );
-                            while (m_it != m_end)
+                            if (line_doc_id > m_it->first)
                             {
-                                if (line_doc_id > m_it->first)
-                                {
-                                    oss << merged_term.MapEntryToString(m_it->first);
-                                    ++m_it;
-                                }
-                                else if (line_doc_id == m_it->first)
-                                {
-                                    oss << merged_term.MapEntryToString(m_it->first);
-                                    ++m_it;
-                                    skip_line_insert = true;
-                                    break;
-                                }
-                                else
-                                    break;
+                                oss << merged_term.MapEntryToString(m_it->first);
+                                ++m_it;
                             }
+                            else if (line_doc_id == m_it->first)
+                            {
+                                oss << merged_term.MapEntryToString(m_it->first);
+                                ++m_it;
+                                skip_line_insert = true;
+                                break;
+                            }
+                            else
+                                break;
+                        }
 
-                            if ( !skip_line_insert )
-                            {
-                                oss << tmp;
-                                
-                                merged_term.UpdateRanking
-                                ( 
-                                    DocFreqEntry{
-                                                    line_doc_id, 
-                                                    static_cast<FreqType>( std::stoul(df_match_d[2].str()) )
-                                                }, 
-                                    num_top_doc_ids_ 
-                                );
-                            }
+                        if ( !skip_line_insert )
+                        {
+                            oss << tmp;
+                            
+                            merged_term.UpdateRanking
+                            ( 
+                                DocFreqEntry{
+                                                line_doc_id, 
+                                                static_cast<FreqType>( std::stoul(df_match_d[2].str()) )
+                                            }, 
+                                num_top_doc_ids_ 
+                            );
                         }
                     }
-                    while (m_it != m_end)
-                    {
-                        oss << merged_term.MapEntryToString(m_it->first);
-                        ++m_it;
-                    }
-                    
-                    oss_freq << merged_term.RankingToString();
-                    
-                    me_file << oss_freq.str();
-                    me_file << oss.str();
-                    
-                    me_file << std::endl;
-                    
-                    ++terms_it;
-                } //if they equal
-                    
+                }
+                while (m_it != m_end)
+                {
+                    oss << merged_term.MapEntryToString(m_it->first);
+                    ++m_it;
+                }
+                
+                oss_freq << merged_term.RankingToString();
+                
+                me_file << oss_freq.str();
+                me_file << oss.str();
+                
+                me_file << std::endl;
+                
+                ++terms_it;
             }
+                
+        }
 
-        }
-        
-        while (terms_it != terms_end)
-        {
-            me_file << *terms_it << ":" 
-                    << table_[i][*terms_it].RankingToString() 
-                    << table_[i][*terms_it].MapToString() << std::endl;
-            ++terms_it;
-        }
-        
     }
     
-    ma_file.close();
-    me_file.close();
+    while (terms_it != terms_end)
+    {
+        me_file << *terms_it << ":" 
+                << table_[i][*terms_it].RankingToString() 
+                << table_[i][*terms_it].MapToString() << std::endl;
+        ++terms_it;
+    }
     
     table_[i].clear();
     
