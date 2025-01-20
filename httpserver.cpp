@@ -12,6 +12,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "BS_thread_pool.hpp"
+
 #include "main.cpp"
 #include "sheduler.cpp"
 
@@ -58,7 +60,7 @@ void DecodeUrl(std::string& enc_url)
         enc_url = std::regex_replace(enc_url, pair.first, pair.second);
 }
 
-void HandleRequest(int client_socket, AuxiliaryIndex& ai_many) 
+void HandleRequest(int& client_socket, AuxiliaryIndex& ai_many) 
 {
     const size_t kMaxBufferSize = 512;
     char request[kMaxBufferSize];
@@ -104,6 +106,7 @@ void HandleRequest(int client_socket, AuxiliaryIndex& ai_many)
     close(client_socket);
 }
 
+
 int main() 
 {
     size_t num_of_segments = 10;          
@@ -113,11 +116,20 @@ int main()
 
     std::thread t_ai(run, std::ref(ai_many));
     t_ai.detach();
+    ////////////////////////////
+
+    std::cout << "Creating thread pool...\n"; 
+    BS::thread_pool<4> pool(4);
+
+    //////////////////////////
 
     std::cout << "Creating Sheduler..." << std::endl;
-    Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка (copy)/testdata/", &ai_many, 20);
+    Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка (copy)/data/", &ai_many, &pool, 20);
 	std::thread t_s(&Sheduler::MonitorData, &s);
     t_s.detach();
+
+    ///////////////////
+
 
     std::ifstream file(HTML_ROOT, std::ios::in);
     if (file.is_open()) 
@@ -130,19 +142,8 @@ int main()
         std::cerr << "Cannot load HTML content (root)\n";
         return 1;
     }
-
-    /*file = std::ifstream(HTML_SECOND, std::ios::in);
-    if (file.is_open())
-    {
-        content_second = std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-        file.close();
-    }
-    else
-    {
-        std::cerr << "Cannot load HTML content (second)\n";
-        return 1;
-    }*/
     
+    //////////////////////
 
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (-1 == server_socket) 
@@ -182,7 +183,10 @@ int main()
             continue;
         }
 
-        HandleRequest(client_socket, std::ref(ai_many));
+        (void) pool.submit_task([&client_socket, &ai_many] {
+            HandleRequest(client_socket, std::ref(ai_many));
+        }, BS::pr::high);
+
         //here must be thread pool 
     }
 

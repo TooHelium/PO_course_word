@@ -1,4 +1,5 @@
 #include "sheduler.hpp"
+//#include "BS_thread_pool.hpp"
 
 #include <chrono> //for thread to sleep
 #include <iostream>
@@ -8,13 +9,14 @@
 #include <filesystem>
 #include <fstream>
 
-Sheduler::Sheduler(const std::string dp, AuxiliaryIndex* ai_many, size_t sleep_duration)
+Sheduler::Sheduler(const std::string dp, AuxiliaryIndex* ai_many, BS::thread_pool<4>* thread_pool, size_t sleep_duration)
 {
     if ( !(std::filesystem::exists(dp) && std::filesystem::is_directory(dp)) )
         throw std::invalid_argument("Data path does not exist or is not a directory");
     
     data_path_ = dp;
     ai = ai_many;
+    pool = thread_pool;
     duration_ = std::chrono::seconds( sleep_duration );
 }
 
@@ -82,14 +84,16 @@ bool Sheduler::DirIsReady(const std::filesystem::path& path)
     return false;
 }
 
+
 void Sheduler::InspectDir(const std::string& directory_path)
 {
     for (const auto& entry : std::filesystem::directory_iterator(directory_path))
     {
         if (entry.path().extension() == ".txt")
         {
-            //tasks_pool_.push_back(entry.path().string());
-            Split(entry.path());
+            (void) pool->submit_task( [this, entry] {
+                Split(entry.path());
+            }, BS::pr::normal);
         }
     }
 }

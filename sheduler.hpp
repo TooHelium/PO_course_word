@@ -8,21 +8,21 @@
 #include <vector>
 #include <unordered_set>
 
-#include "auxiliary_index.hpp"
+//#include "auxiliary_index.hpp"
 
-//class AuxiliaryIndex;
 
 class Sheduler 
 {
 public:
     AuxiliaryIndex* ai;
+	BS::thread_pool<4>* pool;
 	std::string data_path_;
 	std::chrono::duration<size_t> duration_;
 	std::unordered_set<std::string> monitored_dirs_;
 	const std::string ready_dir_marker_ = "___"; // 3 underscores
 	
 public:
-	Sheduler(const std::string dp, AuxiliaryIndex* ai_many, size_t sleep_duration);
+	Sheduler(const std::string dp, AuxiliaryIndex* ai_many, BS::thread_pool<4>* thread_pool, size_t sleep_duration);
 
 	void MonitorData();
 	

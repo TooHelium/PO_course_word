@@ -96,13 +96,13 @@ void run(AuxiliaryIndex& ai_many)
 	//std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
 	//AuxiliaryIndex ai_many(num_of_segments, ma, me);
 
-	std::string dirs[4] = {
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/1", //2 3 4 1
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/2",
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/3",
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/4"
-	};
-
+	//std::string dirs[4] = {
+	//	"/home/dima/Desktop/БІС/test IR/Новая папка/data/1", //2 3 4 1
+	//	"/home/dima/Desktop/БІС/test IR/Новая папка/data/2",
+	//	"/home/dima/Desktop/БІС/test IR/Новая папка/data/3",
+	//	"/home/dima/Desktop/БІС/test IR/Новая папка/data/4"
+	//};
+/*
 	int t = 4;
 	std::thread writers[t];
 	for (int i = 0; i < t; ++i)
@@ -127,16 +127,19 @@ void run(AuxiliaryIndex& ai_many)
 		total += ai_many.SegmentSize(i);
 	}
 	std::cout << "Total :" << total << std::endl;
+*/
+	size_t total;
 
-	while (1) { 
-		std::this_thread::sleep_for(std::chrono::seconds( 30 ));
-
+	while (1) 
+	{ 
 		total = 0;
 		for (size_t i = 0; i < num_of_segments; ++i){
 			std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
 			total += ai_many.SegmentSize(i);
 		}
 		std::cout << "Total :" << total << std::endl;
+
+		std::this_thread::sleep_for(std::chrono::seconds( 30 ));
 	};
 }
 /*

@@ -601,141 +601,136 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string
 
 
 void AuxiliaryIndex::MergeAiWithDisk(size_t i) //TODO
-	{
-		//for (size_t i = 0; i < num_segments_; ++i)
-		{
-			//std::unique_lock<std::shared_mutex> _(*segments_[i]); //maybe block readers?
-			
-			std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; 
-			std::string merge_filename = indexes_paths_[i].GetMergeIndexPath() + "i" + std::to_string(i) + ".txt"; 
-			
-			std::ifstream ma_file(index_filename);
-			std::ofstream me_file(merge_filename);
-			
-			if (!ma_file && !me_file)
-			{
-				std::cerr << "Error opening files (ma, me)" << std::endl;
-			}
-			else
-			{
-				std::vector<TermType> terms;
-				terms.reserve( table_[i].size() );
-				
-				for (const auto& pair : table_[i])
-					terms.push_back(pair.first);
-				
-				std::sort(terms.begin(), terms.end()); //terms are sorted
-				auto terms_it = terms.begin();
-				auto terms_end = terms.end();
-				
-				std::string line;
-				std::regex term_regex("^(.+):"); //"\\w+(['-]\\w+)*" maybe to use this?
-				std::regex term_info_regex("\\d+=\\d+,[^;]+;"); //be cautious, my friend
-				std::regex doc_freq_regex("(\\d+)=(\\d+)");
-				std::smatch match;
-				
-				while (std::getline(ma_file, line))
-				{
-					//maybe add regex check on correct line?
-					if (terms_it == terms_end)
-					{
-						me_file << line << std::endl;
-						continue;
-					}
-					
-					if (std::regex_search(line, match, term_regex))
-					{
-						while (terms_it != terms_end && *terms_it < match[1].str())
-						{
-							me_file << *terms_it << ":" 
-									<< table_[i][*terms_it].RankingToString() 
-									<< table_[i][*terms_it].MapToString() << std::endl;
-							++terms_it;
-						}
-						if (terms_it == terms_end || *terms_it > match[1].str())
-						{
-							me_file << line << std::endl;
-							continue;
-						}
-						else //if they equal
-						{							
-							me_file << *terms_it << ":";
-							
-							std::ostringstream oss;
-							std::ostringstream oss_freq;
-							
-							TermInfo& merged_term = table_[i][*terms_it];
-							auto m_it = merged_term.doc_pos_map.begin();
-							auto m_end = merged_term.doc_pos_map.end();
-							 //using for sorting rankings only. maybe to use existed?
-							
-							auto begin = std::sregex_token_iterator(line.begin(), line.end(), term_info_regex);
-							auto end = std::sregex_token_iterator();
-							std::smatch df_match_d;
-							
-							for (auto it = begin; it != end; ++it)
-							{	
-								std::string tmp = it->str();
-								if (std::regex_search(tmp, df_match_d, doc_freq_regex))
-								{
-									while (m_it != m_end)
-									{
-										if (static_cast<DocIdType>( std::stoul(df_match_d[1].str()) ) >= m_it->first)
-										{
-											oss << merged_term.MapEntryToString(m_it->first);
-											++m_it;
-										}
-										else
-											break;
-									}
+{
+    std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; 
+    std::string merge_filename = indexes_paths_[i].GetMergeIndexPath() + "i" + std::to_string(i) + ".txt"; 
+    
+    std::ifstream ma_file(index_filename);
+    std::ofstream me_file(merge_filename);
+    
+    if (!ma_file && !me_file)
+    {
+        std::cerr << "Error opening files (ma, me)" << std::endl;
+    }
+    else
+    {
+        std::vector<TermType> terms;
+        terms.reserve( table_[i].size() );
+        
+        for (const auto& pair : table_[i])
+            terms.push_back(pair.first);
+        
+        std::sort(terms.begin(), terms.end()); //terms are sorted
+        auto terms_it = terms.begin();
+        auto terms_end = terms.end();
+        
+        std::string line;
+        std::regex term_regex("^(.+):"); //"\\w+(['-]\\w+)*" maybe to use this?
+        std::regex term_info_regex("\\d+=\\d+,[^;]+;"); //be cautious, my friend
+        std::regex doc_freq_regex("(\\d+)=(\\d+)");
+        std::smatch match;
+        
+        while (std::getline(ma_file, line))
+        {
+            //maybe add regex check on correct line?
+            if (terms_it == terms_end)
+            {
+                me_file << line << std::endl;
+                continue;
+            }
+            
+            if (std::regex_search(line, match, term_regex))
+            {
+                while (terms_it != terms_end && *terms_it < match[1].str())
+                {
+                    me_file << *terms_it << ":" 
+                            << table_[i][*terms_it].RankingToString() 
+                            << table_[i][*terms_it].MapToString() << std::endl;
+                    ++terms_it;
+                }
+                if (terms_it == terms_end || *terms_it > match[1].str())
+                {
+                    me_file << line << std::endl;
+                    continue;
+                }
+                else //if they equal
+                {							
+                    me_file << *terms_it << ":";
+                    
+                    std::ostringstream oss;
+                    std::ostringstream oss_freq;
+                    
+                    TermInfo& merged_term = table_[i][*terms_it];
+                    auto m_it = merged_term.doc_pos_map.begin();
+                    auto m_end = merged_term.doc_pos_map.end();
+                        //using for sorting rankings only. maybe to use existed?
+                    
+                    auto begin = std::sregex_token_iterator(line.begin(), line.end(), term_info_regex);
+                    auto end = std::sregex_token_iterator();
+                    std::smatch df_match_d;
+                    
+                    for (auto it = begin; it != end; ++it)
+                    {	
+                        std::string tmp = it->str();
+                        if (std::regex_search(tmp, df_match_d, doc_freq_regex))
+                        {
+                            while (m_it != m_end)
+                            {
+                                if (static_cast<DocIdType>( std::stoul(df_match_d[1].str()) ) >= m_it->first)
+                                {
+                                    oss << merged_term.MapEntryToString(m_it->first);
+                                    ++m_it;
+                                }
+                                else
+                                    break;
+                            }
 
-									oss << tmp; //duplicate
-									
-									merged_term.UpdateRanking
-									( 
-										DocFreqEntry{
-														static_cast<DocIdType>( std::stoul(df_match_d[1].str()) ), 
-														static_cast<FreqType>( std::stoul(df_match_d[2].str()) )
-													}, 
-										num_top_doc_ids_ 
-									);
-								}
-							}
-							while (m_it != m_end)
-							{
-								oss << merged_term.MapEntryToString(m_it->first);
-								++m_it;
-							}
-							
-							oss_freq << merged_term.RankingToString();
-							
-							me_file << oss_freq.str();
-							me_file << oss.str();
-							
-							me_file << std::endl;
-							
-							++terms_it;
-						} //if they equal
-							
-					}
+                            oss << tmp; //duplicate
+                            
+                            merged_term.UpdateRanking
+                            ( 
+                                DocFreqEntry{
+                                                static_cast<DocIdType>( std::stoul(df_match_d[1].str()) ), 
+                                                static_cast<FreqType>( std::stoul(df_match_d[2].str()) )
+                                            }, 
+                                num_top_doc_ids_ 
+                            );
+                        }
+                    }
+                    while (m_it != m_end)
+                    {
+                        oss << merged_term.MapEntryToString(m_it->first);
+                        ++m_it;
+                    }
+                    
+                    oss_freq << merged_term.RankingToString();
+                    
+                    me_file << oss_freq.str();
+                    me_file << oss.str();
+                    
+                    me_file << std::endl;
+                    
+                    ++terms_it;
+                } //if they equal
+                    
+            }
 
-				}
-				
-				while (terms_it != terms_end)
-				{
-					me_file << *terms_it << ":" 
-							<< table_[i][*terms_it].RankingToString() 
-							<< table_[i][*terms_it].MapToString() << std::endl;
-					++terms_it;
-				}
-				
-			}
-			
-			ma_file.close();
-			me_file.close();
-			
-			table_[i].clear();
-			
-			indexes_paths_[i].UpdateMainIndexPath();
-		}
-	}
+        }
+        
+        while (terms_it != terms_end)
+        {
+            me_file << *terms_it << ":" 
+                    << table_[i][*terms_it].RankingToString() 
+                    << table_[i][*terms_it].MapToString() << std::endl;
+            ++terms_it;
+        }
+        
+    }
+    
+    ma_file.close();
+    me_file.close();
+    
+    table_[i].clear();
+    
+    indexes_paths_[i].UpdateMainIndexPath();
+}
