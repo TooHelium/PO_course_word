@@ -41,7 +41,7 @@ std::regex path_second("^GET /second.html HTTP/1.1");
 
 using DecodeRule = std::pair<std::regex, std::string>;
 
-std::vector<DecodeRule> url_decoding_map = {
+std::vector<DecodeRule> url_decoding_map = { //TODO RENAME DUE TO GOOGLE CONVENTIONS
      {std::regex("%20|\\+"), " "},
      {std::regex("%22"), "\""}, 
      {std::regex("%27"), "'"}, 
