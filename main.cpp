@@ -139,7 +139,11 @@ void run(AuxiliaryIndex& ai_many)
 		}
 		std::cout << "Total :" << total << std::endl;
 
-		std::this_thread::sleep_for(std::chrono::seconds( 30 ));
+		std::this_thread::sleep_for(std::chrono::seconds( 15 ));
+
+		//std::cout << "Merging..." << std::endl;
+		//for (int i = 0; i < 10; ++i)
+		//	ai_many.MergeAiWithDisk(i);
 	};
 }
 /*

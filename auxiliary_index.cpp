@@ -493,7 +493,6 @@ bool AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& term, TermsTable
 }
 
 
-
 AuxiliaryIndex::DocIdType AuxiliaryIndex::Read(const TermType& term) 
 {
     size_t i = GetSegmentIndex(term);
@@ -520,11 +519,10 @@ void AuxiliaryIndex::Write(const TermType& term, const DocIdType& doc_id, const 
     
     if ( table_[i].size() > max_segment_size_ )
     {
-        std::cout << "START MERGING " << i << " segment";
+        //std::cout << "START MERGING " << i << " segment";
         MergeAiWithDisk(i);
-        std::cout << "END MERGED " << i << " segment";
-    }
-    
+        //std::cout << "END MERGED " << i << " segment";
+    } 
 }
 
 size_t AuxiliaryIndex::SegmentSize(size_t i) //TODO syncronization
@@ -663,38 +661,53 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //TODO
                     TermInfo& merged_term = table_[i][*terms_it];
                     auto m_it = merged_term.doc_pos_map.begin();
                     auto m_end = merged_term.doc_pos_map.end();
-                        //using for sorting rankings only. maybe to use existed?
                     
-                    auto begin = std::sregex_token_iterator(line.begin(), line.end(), term_info_regex);
-                    auto end = std::sregex_token_iterator();
+                    auto begin = std::sregex_iterator(line.begin(), line.end(), term_info_regex);
+                    auto end = std::sregex_iterator();
                     std::smatch df_match_d;
                     
+                    std::string tmp;
+                    DocIdType line_doc_id;
+                    bool skip_line_insert;
                     for (auto it = begin; it != end; ++it)
                     {	
-                        std::string tmp = it->str();
+                        tmp = it->str();
+                        skip_line_insert = false;
+
                         if (std::regex_search(tmp, df_match_d, doc_freq_regex))
                         {
+                            line_doc_id = static_cast<DocIdType>( std::stoul(df_match_d[1].str()) );
                             while (m_it != m_end)
                             {
-                                if (static_cast<DocIdType>( std::stoul(df_match_d[1].str()) ) >= m_it->first)
+                                if (line_doc_id > m_it->first)
                                 {
                                     oss << merged_term.MapEntryToString(m_it->first);
                                     ++m_it;
+                                }
+                                else if (line_doc_id == m_it->first)
+                                {
+                                    oss << merged_term.MapEntryToString(m_it->first);
+                                    ++m_it;
+                                    skip_line_insert = true;
+                                    break;
                                 }
                                 else
                                     break;
                             }
 
-                            oss << tmp; //duplicate
-                            
-                            merged_term.UpdateRanking
-                            ( 
-                                DocFreqEntry{
-                                                static_cast<DocIdType>( std::stoul(df_match_d[1].str()) ), 
-                                                static_cast<FreqType>( std::stoul(df_match_d[2].str()) )
-                                            }, 
-                                num_top_doc_ids_ 
-                            );
+                            if ( !skip_line_insert )
+                            {
+                                oss << tmp;
+                                
+                                merged_term.UpdateRanking
+                                ( 
+                                    DocFreqEntry{
+                                                    line_doc_id, 
+                                                    static_cast<FreqType>( std::stoul(df_match_d[2].str()) )
+                                                }, 
+                                    num_top_doc_ids_ 
+                                );
+                            }
                         }
                     }
                     while (m_it != m_end)

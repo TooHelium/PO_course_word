@@ -124,7 +124,7 @@ int main()
     //////////////////////////
 
     std::cout << "Creating Sheduler..." << std::endl;
-    Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка (copy)/data/", &ai_many, &pool, 20);
+    Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка (copy)/data/", &ai_many, &pool, 1);
 	std::thread t_s(&Sheduler::MonitorData, &s);
     t_s.detach();
 
