@@ -518,25 +518,24 @@ void AuxiliaryIndex::Write(const TermType& term, const DocIdType& doc_id, const 
     table_[i][term].UpdateRanking( DocFreqEntry{doc_id, positions.size()}, num_top_doc_ids_ ); //maybe make it static for CLASS, eh?
     
     if ( table_[i].size() > max_segment_size_ )
-    {
-        //std::cout << "START MERGING " << i << " segment";
         MergeAiWithDisk(i);
-        //std::cout << "END MERGED " << i << " segment";
-    } 
 }
 
-size_t AuxiliaryIndex::SegmentSize(size_t i) //TODO syncronization
+size_t AuxiliaryIndex::SegmentSize(size_t i) //REFACTORED TODO
 {
     if (i < table_.size())
+    {
+        std::shared_lock<std::shared_mutex> _(*segments_[i]);
         return table_[i].size();
-    
+    }
+        
     return 0;
 }
 
 
-AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string& term) //TODO
+AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string& target_term) //REFACTORED TODO
 {
-    size_t i = GetSegmentIndex(term);
+    size_t i = GetSegmentIndex(target_term);
     
     std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt";
         
@@ -544,19 +543,20 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string
 
     if (!file)
     {
-        std::cerr << "Error opening file (index) " << index_filename << std::endl;
+        std::cerr << "Error opening file for reading: " << index_filename << '\n';
         return DocIdType(0);
     }
 
     std::regex term_regex("^([^ ]+):\\[([0-9,]+)\\]");
     std::smatch match;
     std::string line;
-    std::string tmp;
+    std::string curr_term;
 
     uint64_t left = 0;
     file.seekg(0, std::ios::end);
     uint64_t right = static_cast<uint64_t>( file.tellg() );
     uint64_t mid;
+    std::streamoff one_offset = static_cast<std::streamoff>(1);
 
     while(left <= right)
     {
@@ -564,29 +564,29 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string
         file.seekg(mid);
         
         while (file.tellg() > 0 && file.peek() != '\n')
-            file.seekg(file.tellg() - static_cast<std::streamoff>(1));
+            file.seekg(file.tellg() - one_offset);
 
         if (file.peek() == '\n')
-            file.seekg(file.tellg() + static_cast<std::streamoff>(1));
+            file.seekg(file.tellg() + one_offset);
         
         auto start = file.tellg();
         std::getline(file, line);
         if (std::regex_search(line, match, term_regex))
-            tmp = match[1].str();
+            curr_term = match[1].str();
             
-        if (term < tmp)
+        if (target_term < curr_term)
             right = mid - 1;
-        else if (term > tmp)
+        else if (target_term > curr_term)
             left = mid + 1;
         else
             return static_cast<DocIdType>( std::stoul(match[2].str()) ); //returns the top 1 only
     }
-    
+
     return DocIdType(0);
 }
 
 
-void AuxiliaryIndex::MergeAiWithDisk(size_t i) //TODO
+void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
 {
     std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; 
     std::string merge_filename = indexes_paths_[i].GetMergeIndexPath() + "i" + std::to_string(i) + ".txt"; 
@@ -601,7 +601,7 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //TODO
         if (!ma_file) std::cerr << "ma: " << index_filename << '\n';
         if (!ma_file) std::cerr << "me: " << merge_filename << '\n';
 
-        table_[i].clear(); //TODO NOT SURE ABOUT THIS
+        table_[i].clear(); //DOTO NOT SURE ABOUT THIS
 
         return;
     }
