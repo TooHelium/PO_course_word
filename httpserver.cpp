@@ -36,6 +36,13 @@
                              "\r\n" \
                              + content)
 
+#define STATUS_500 ("HTTP/1.1 500 Internal Server Error\r\n" \
+                    "Content-Type: text/html; charset=UTF-8\r\n" \
+                    "Content-Length: 158\r\n" \
+                    "\r\n" \
+                    "<!DOCTYPE html><html><head><title>500 Internal Server Error</title></head><body><h1>500 Internal Server Error</h1></body></html>")
+
+
 std::string content_root;
 std::string content_second;
 
@@ -60,7 +67,7 @@ void DecodeUrl(std::string& enc_url)
         enc_url = std::regex_replace(enc_url, pair.first, pair.second);
 }
 
-void HandleRequest(int& client_socket, AuxiliaryIndex& ai_many) 
+void HandleRequest(int& client_socket, AuxiliaryIndex& ai_many, Sheduler& sheduler) 
 {
     const size_t kMaxBufferSize = 512;
     char request[kMaxBufferSize];
@@ -91,11 +98,25 @@ void HandleRequest(int& client_socket, AuxiliaryIndex& ai_many)
         http_response = STATUS_200(content_root);
     else if (std::regex_search(request_str, match, query_regex))
     {
-        std::string enc_url = match[1].str();
-        DecodeUrl(enc_url);
-        std::string doc_id = std::to_string( ai_many.ReadPhrase(enc_url) );
-        
-        http_response = STATUS_200(doc_id);
+        std::string query = match[1].str();
+        DecodeUrl(query);
+
+        std::string path = sheduler.GetPathByDocId( ai_many.ReadPhrase(query) );
+
+        if (path == "none")
+            http_response = STATUS_404;
+        else
+        {
+            std::ifstream file(path, std::ios::binary);
+            if (!file)
+                http_response = STATUS_500;
+            else
+            {
+                std::ostringstream ss;
+                ss << file.rdbuf();
+                http_response = STATUS_200( ss.str() );
+            }
+        }
     }
     else
         http_response = STATUS_404;
@@ -124,7 +145,7 @@ int main()
     //////////////////////////
 
     std::cout << "Creating Sheduler..." << std::endl;
-    Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка (copy)/data/", &ai_many, &pool, 1);
+    Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка (copy)/data/", &ai_many, &pool, 5);
 	std::thread t_s(&Sheduler::MonitorData, &s);
     t_s.detach();
 
@@ -183,8 +204,8 @@ int main()
             continue;
         }
 
-        (void) pool.submit_task([&client_socket, &ai_many] {
-            HandleRequest(client_socket, std::ref(ai_many));
+        (void) pool.submit_task([&client_socket, &ai_many, &s] {
+            HandleRequest(client_socket, std::ref(ai_many), std::ref(s));
         }, BS::pr::high);
 
         //here must be thread pool 
