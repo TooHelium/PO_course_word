@@ -116,7 +116,7 @@ int main()
 
     std::cout << "Creating Sheduler..." << std::endl;
     Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка (copy)/testdata/", &ai_many, 20);
-	std::thread t_s(&Sheduler::MonitorData, &s, std::ref(ai_many));
+	std::thread t_s(&Sheduler::MonitorData, &s);
     t_s.detach();
 
     std::ifstream file(HTML_ROOT, std::ios::in);

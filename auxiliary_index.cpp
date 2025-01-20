@@ -121,7 +121,7 @@ std::string AuxiliaryIndex::IndexPath::GetMergeIndexPath()
 		}
 
 
-size_t AuxiliaryIndex::Phrase::FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms) //somehow we need to make them wait for each other
+size_t AuxiliaryIndex::Phrase::FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms, size_t distance) //somehow we need to make them wait for each other
 		{
 			std::vector<std::vector<PosType>*> pos_vectors;
 			
@@ -247,11 +247,17 @@ void AuxiliaryIndex::SplitIntoPhrases(std::string query, std::vector<Phrase>& ph
         for (auto word_it = words_begin; word_it != words_end; ++word_it) 
             phrase.words.push_back(word_it->str());
         
+        phrase.ai_words = phrase.words;
+        phrase.disk_words = phrase.words;
+
         std::string tmp = match[0].str();
         if (std::regex_search(tmp, match, distance_regex))	
-            phrase.distance = std::stoull( match[1].str() );
+            phrase.words_distance = std::stoull( match[1].str() );
         else
-            phrase.distance = 1; //default distance. maybe  in separate class variable
+            phrase.words_distance = 1; //default distance. maybe  in separate class variable
+
+        phrase.ai_distance = phrase.words_distance;
+        phrase.disk_distance = phrase.words_distance;
         
         phrases.push_back(phrase);
     }
@@ -270,7 +276,8 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
     std::vector<std::shared_lock<std::shared_mutex>> locks;
     
     //std::unordered_set<size_t> acquired_segments;
-    for (Phrase& phrase : phrases)
+    /*
+    for (Phrase& phrase : phrases) //old versioin
     {
         for (const TermType& word : phrase.words)
         {
@@ -292,32 +299,72 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
             else
                 return DocIdType(0); 
         }
-    }
+    }//old version
+    */
+
+    for (Phrase& phrase : phrases) //new versioin
+    {
+        for (const TermType& word : phrase.words)
+        {
+            size_t i = GetSegmentIndex(word);
+            locks.emplace_back(*segments_[i]);
+            //acquired_segments.insert(i);
+            auto it = table_[i].find(word);
+            if (it != table_[i].end())
+                phrase.ai_terms.push_back( &(it->second) ); //RENAME terms in its struct
+            else
+            {
+                phrase.ai_words.erase( std::find(phrase.ai_words.begin(), phrase.ai_words.end(), word) );
+                //phrase.words.erase(word);
+                phrase.ai_distance += 1;
+                //return DocIdType(0);//attention WILL WE RELEASE LOCKS HERE !!!!!!!!!!!!!!!
+            }
+
+            //if ( !ReadTermInfoFromDiskLog(word, phrases_disk_table) )
+            //    return DocIdType(0);
+
+            ReadTermInfoFromDiskLog(word, phrases_disk_table);
+
+            it = phrases_disk_table.find(word);
+            if (it != phrases_disk_table.end())
+                phrase.disk_terms.push_back( &(it->second) );
+            else
+            {
+                phrase.disk_words.erase( std::find(phrase.disk_words.begin(), phrase.disk_words.end(), word) );
+                //return DocIdType(0);
+                phrase.disk_distance += 1;
+            }
+                 
+        }
+    }//new version
 
     //AI best score
     DocIdType curr_doc_id;
     DocIdType ai_best_doc_id = 0;
     size_t curr_score = 0;
     size_t max_score = curr_score;
-    for (const auto& pair : phrases[0].ai_terms[0]->doc_pos_map)
-    {	
-        curr_doc_id = pair.first;
-        
-        curr_score = 0;
-        for (Phrase& phrase : phrases)
-            curr_score += phrase.FindIn(curr_doc_id, phrase.ai_terms);
-        
-        if (curr_score > max_score)
-        {
-            max_score = curr_score;
-            ai_best_doc_id = curr_doc_id;
+
+    if ( !phrases[0].ai_terms.empty() )
+    {
+        for (const auto& pair : phrases[0].ai_terms[0]->doc_pos_map)
+        {	
+            curr_doc_id = pair.first;
+            
+            curr_score = 0;
+            for (Phrase& phrase : phrases)
+                curr_score += phrase.FindIn(curr_doc_id, phrase.ai_terms, phrase.ai_distance);
+            
+            if (curr_score > max_score)
+            {
+                max_score = curr_score;
+                ai_best_doc_id = curr_doc_id;
+            }
         }
     }
 
-    //return ai_best_doc_id;
+    if ( phrases[0].disk_terms.empty() )
+        return ai_best_doc_id;
 
-    //Disk best score
-    //curr_doc_id;
     DocIdType disk_best_doc_id = 0;
     curr_score = 0;
     max_score = curr_score;
@@ -327,7 +374,7 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
         
         curr_score = 0;
         for (Phrase& phrase : phrases)
-            curr_score += phrase.FindIn(curr_doc_id, phrase.disk_terms);
+            curr_score += phrase.FindIn(curr_doc_id, phrase.disk_terms, phrase.disk_distance);
         
         if (curr_score > max_score)
         {

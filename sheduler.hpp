@@ -31,8 +31,6 @@ public:
 	bool DirIsReady(const std::filesystem::path& path);
 	
 	void InspectDir(const std::string& directory_path);
-	
-	void PrintTasks();
 
     void Split(const std::filesystem::path& file_path);
 };

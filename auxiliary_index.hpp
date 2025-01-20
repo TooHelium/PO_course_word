@@ -81,12 +81,16 @@ private:
 	{
     public:
 		std::vector<TermType> words;
+        std::vector<TermType> ai_words;
+        std::vector<TermType> disk_words;
 		std::vector<TermInfo*> ai_terms; //we can not have vectors of reference in simple way RENAME
 		std::vector<TermInfo*> disk_terms;
-		size_t distance;
+		size_t words_distance;
+        size_t ai_distance;
+        size_t disk_distance;
 		
     public:
-		size_t FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms); //somehow we need to make them wait for each other
+		size_t FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms, size_t distance); //somehow we need to make them wait for each other
 	};
 
     //void MergeAiWithDisk(size_t i); //TODO

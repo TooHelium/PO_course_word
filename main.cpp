@@ -121,12 +121,6 @@ void run(AuxiliaryIndex& ai_many)
 	for (int i = 0; i < 10; ++i)
 		ai_many.MergeAiWithDisk(i);
 
-
-	for (int i = 0; i < t; ++i)
-		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
-	for (int i = 0; i < t; ++i)
-		writers[i].join();
-
 	total = 0;
 	for (size_t i = 0; i < num_of_segments; ++i){
 		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
@@ -134,7 +128,16 @@ void run(AuxiliaryIndex& ai_many)
 	}
 	std::cout << "Total :" << total << std::endl;
 
-	while (1) { };
+	while (1) { 
+		std::this_thread::sleep_for(std::chrono::seconds( 30 ));
+
+		total = 0;
+		for (size_t i = 0; i < num_of_segments; ++i){
+			std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+			total += ai_many.SegmentSize(i);
+		}
+		std::cout << "Total :" << total << std::endl;
+	};
 }
 /*
 int main()
