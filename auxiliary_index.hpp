@@ -89,7 +89,7 @@ private:
 		size_t FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms); //somehow we need to make them wait for each other
 	};
 
-    void MergeAiWithDisk(size_t i); //TODO
+    //void MergeAiWithDisk(size_t i); //TODO
     size_t GetSegmentIndex(const TermType& term);
     bool ReadTermInfoFromDiskLog(const std::string& term, TermsTable& phrases_disk_table); //TODO
     DocIdType ReadFromDiskIndexLog(const std::string& term); //TODO
@@ -103,6 +103,8 @@ public:
     DocIdType ReadPhrase(const std::string& query);
 
 	size_t SegmentSize(size_t i); //TODO syncronization
+
+    void MergeAiWithDisk(size_t i); //TODO
 };
 
 #endif //AUXILIARY_INDEX_H

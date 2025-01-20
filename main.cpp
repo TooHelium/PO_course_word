@@ -25,6 +25,236 @@
 
 #include <unordered_set> //for Sheduler
 
+#include "auxiliary_index.cpp"
+
+
+void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
+{
+	std::ifstream file(file_path.string());
+	
+	if (!file)
+	{
+		std::cout << "Error opening file\n";
+		return;
+	}
+	
+	std::string filename = file_path.stem().string();
+	//filename.erase(filename.size() - 2); // erasing '_i' part !!!!!!!!!!!!!!!!!!!!!!!!!
+	uint32_t doc_id = static_cast<uint32_t>( std::stoul(filename) );
+		
+	uint32_t word_position = 1;
+	
+	std::string line;
+	std::regex word_regex("\\w+(['-]\\w+)*");
+
+	while ( std::getline(file, line) )
+	{
+		auto first_word = std::sregex_iterator(line.begin(), line.end(), word_regex);
+		auto last_word = std::sregex_iterator();
+		
+		for (std::sregex_iterator i = first_word; i != last_word; ++i)
+		{
+			std::smatch match = *i;
+			std::string match_str = match.str();
+			
+			std::transform(match_str.begin(), match_str.end(), match_str.begin(), 
+						   [](unsigned char c) { return std::tolower(c); }); 
+			
+			ai.Write(match_str, doc_id, word_position++);
+		}
+	}
+	
+	file.close();
+}
+
+
+namespace fs = std::filesystem;
+
+void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
+{
+	if (fs::exists(directory_path) && fs::is_directory(directory_path))
+	{
+		for (const auto& entry : fs::directory_iterator(directory_path))
+		{
+			if (entry.path().extension() == ".txt") //or maybe .html also
+			{
+				split(entry.path(), ai);
+			}
+		}
+	}
+	else
+	{
+		std::cout << "directory does not exist or not a directory\n";
+	}
+}
+
+
+void run(AuxiliaryIndex& ai_many)
+{
+	size_t num_of_segments = 10;          
+	//std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
+	//std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
+	//AuxiliaryIndex ai_many(num_of_segments, ma, me);
+
+	std::string dirs[4] = {
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/1", //2 3 4 1
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/2",
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/3",
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/4"
+	};
+
+	int t = 4;
+	std::thread writers[t];
+	for (int i = 0; i < t; ++i)
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
+	for (int i = 0; i < t; ++i)
+		writers[i].join();
+
+	size_t total = 0;
+	for (size_t i = 0; i < num_of_segments; ++i){
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+		total += ai_many.SegmentSize(i);
+	}
+	std::cout << "Total :" << total << std::endl;
+
+
+	for (int i = 0; i < 10; ++i)
+		ai_many.MergeAiWithDisk(i);
+
+
+	for (int i = 0; i < t; ++i)
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
+	for (int i = 0; i < t; ++i)
+		writers[i].join();
+
+	total = 0;
+	for (size_t i = 0; i < num_of_segments; ++i){
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+		total += ai_many.SegmentSize(i);
+	}
+	std::cout << "Total :" << total << std::endl;
+
+	while (1) { };
+}
+/*
+int main()
+{
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	size_t num_of_segments = 10;          
+	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
+	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
+	AuxiliaryIndex ai_many(num_of_segments, ma, me);
+	
+	
+		Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка/testdata/", 1);
+		std::thread t(&Sheduler::MonitorData, &s, std::ref(ai_many));
+		
+		
+		std::this_thread::sleep_for(std::chrono::duration<int>(30));
+	
+	std::cout << "Searching phrase..." << std::endl;
+	uint32_t id = ai_many.ReadPhrase(" (fitness enjoy)4 ");
+	std::cout << "Phrase in id " << id << " path: " << s.GetPathByDocId(id) << std::endl;
+	
+	size_t total = 0;
+	for (size_t i = 0; i < num_of_segments; ++i){
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+		total += ai_many.SegmentSize(i);
+	}
+	std::cout << "Total :" << total << std::endl;
+	
+	t.detach();
+	
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	size_t num_of_segments = 10;          
+	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
+	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
+	AuxiliaryIndex ai_many(num_of_segments, ma, me);
+	
+	std::string dirs[4] = {
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/1", //2 3 4 1
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/2",
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/3",
+		"/home/dima/Desktop/БІС/test IR/Новая папка/data/4"
+	}; 
+	
+	//walkdirs(dirs[0], ai_many);
+	//walkdirs(dirs[1], ai_many);
+	//walkdirs(dirs[2], ai_many);
+	//walkdirs(dirs[3], ai_many);
+	
+	int t = 4;
+	std::thread writers[t];
+	for (int i = 0; i < t; ++i)
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
+	
+	for (int i = 0; i < t; ++i)
+		writers[i].join();
+
+	size_t total = 0;
+	for (size_t i = 0; i < num_of_segments; ++i){
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+		total += ai_many.SegmentSize(i);
+	}
+	std::cout << "Total :" << total << std::endl;
+	
+	std::cout << "Searching phrase before mearging..." << std::endl;
+	std::cout << "Phrase in " << ai_many.ReadPhrase(" (home-made style) (visual) (effects, awkward dialogue,) ") << std::endl;
+	
+	for (int i = 0; i < 10; ++i)
+		ai_many.MergeAiWithDisk(i);
+
+	for (int i = 0; i < t; ++i)
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
+	for (int i = 0; i < t; ++i)
+		writers[i].join();
+
+	total = 0;
+	for (size_t i = 0; i < num_of_segments; ++i){
+		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
+		total += ai_many.SegmentSize(i);
+	}
+	std::cout << "Total :" << total << std::endl;
+
+	std::cout << "Searching phrase after mearging..." << std::endl;
+	std::cout << "Phrase in " << ai_many.ReadPhrase(" (home-made style) (visual) (effects, awkward dialogue,) ") << std::endl;
+
+	//std::cout << ai_many.ReadFromDiskIndexLin("and") << std::endl;
+
+	//std::cout << ai_many.ReadFromDiskIndexLog("anytime") << std::endl;
+	//std::cout << ai_many.ReadFromDiskIndexLog("amelioration") << std::endl;
+	//std::cout << ai_many.ReadFromDiskIndexLog("9") << std::endl;
+
+	
+	
+	//std::cout << "Reading from disk..." << std::endl;
+	
+	//std::cout << ai_many.ReadFromDiskIndex("and") << std::endl; //10 4
+	//std::cout << ai_many.ReadFromDiskIndex("south") << std::endl; //238 4
+	//std::cout << ai_many.ReadFromDiskIndex("text") << std::endl; //94 8
+	//std::cout << ai_many.Read("soft-core") << std::endl;
+	
+	
+	/*
+	int t = 4;
+	std::thread writers[t];
+	for (int i = 0; i < t; ++i)
+		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
+	
+	for (int i = 0; i < t; ++i)
+		writers[i].join();
+	*/
+	
+	
+
+	
+	//return 0;
+//}
+
+
+/*
+
 class AuxiliaryIndex
 {
 private:
@@ -825,329 +1055,4 @@ public:
 	}
 };
 
-void split(const std::filesystem::path& file_path, AuxiliaryIndex& ai)
-{
-	std::ifstream file(file_path.string());
-	
-	if (!file)
-	{
-		std::cout << "Error opening file\n";
-		return;
-	}
-	
-	std::string filename = file_path.stem().string();
-	//filename.erase(filename.size() - 2); // erasing '_i' part !!!!!!!!!!!!!!!!!!!!!!!!!
-	uint32_t doc_id = static_cast<uint32_t>( std::stoul(filename) );
-		
-	uint32_t word_position = 1;
-	
-	std::string line;
-	std::regex word_regex("\\w+(['-]\\w+)*");
-
-	while ( std::getline(file, line) )
-	{
-		auto first_word = std::sregex_iterator(line.begin(), line.end(), word_regex);
-		auto last_word = std::sregex_iterator();
-		
-		for (std::sregex_iterator i = first_word; i != last_word; ++i)
-		{
-			std::smatch match = *i;
-			std::string match_str = match.str();
-			
-			std::transform(match_str.begin(), match_str.end(), match_str.begin(), 
-						   [](unsigned char c) { return std::tolower(c); }); 
-			
-			ai.Write(match_str, doc_id, word_position++);
-		}
-	}
-	
-	file.close();
-}
-
-
-namespace fs = std::filesystem;
-
-void walkdirs(const std::string& directory_path, AuxiliaryIndex& ai)
-{
-	if (fs::exists(directory_path) && fs::is_directory(directory_path))
-	{
-		for (const auto& entry : fs::directory_iterator(directory_path))
-		{
-			if (entry.path().extension() == ".txt") //or maybe .html also
-			{
-				split(entry.path(), ai);
-			}
-		}
-	}
-	else
-	{
-		std::cout << "directory does not exist or not a directory\n";
-	}
-}
-
-class Sheduler //TODO i think we need delete code that remove _number part from data file's path
-{
-private:
-	std::string data_path_;
-	//AuxiliaryIndex& ai_;
-	std::chrono::duration<size_t> duration_;
-	std::unordered_set<std::string> monitored_dirs_; //directories a Sheduler know about. they are unique
-	
-	std::string ready_dir_marker_ = "___"; // 3 underscores
-	
-	std::vector<std::string> tasks_pool_;
-	
-public:
-	Sheduler(const std::string dp, /*AuxiliaryIndex& ai,*/ size_t sleep_duration)
-	{
-		if ( !(fs::exists(dp) && fs::is_directory(dp)) )
-			throw std::invalid_argument("Data path does not exist or is not a directory");
-		
-		data_path_ = dp;
-		//ai_ = ai;
-		duration_ = std::chrono::seconds( sleep_duration );
-	}
-	
-	void MonitorData(AuxiliaryIndex& ai)
-	{
-		std::string curr_dir;
-		
-		while (1)
-		{
-			std::this_thread::sleep_for(duration_);
-			
-			for (const auto& entry : fs::directory_iterator(data_path_))
-			{
-				if (fs::is_directory(entry.path()) && DirIsReady(entry.path()))
-				{		
-					curr_dir = entry.path().string();
-				
-					if (monitored_dirs_.find(curr_dir) == monitored_dirs_.end())
-					{
-						std::cout << "New directory " << curr_dir << std::endl;
-						monitored_dirs_.insert(curr_dir);
-						InspectDir(curr_dir, ai);
-					}
-				}
-			}
-		}
-	}
-	
-	std::string GetPathByDocId(const uint32_t& id)
-	{
-		std::regex id_range_regex("(\\d+)-(\\d+)");
-		std::smatch match;
-		
-		for (const auto& entry : fs::directory_iterator(data_path_))
-		{
-			if (fs::is_directory(entry.path()) && DirIsReady(entry.path()))
-			{
-				std::string tmp = entry.path().stem().string();
-				if (std::regex_search(tmp, match, id_range_regex))
-				{
-					uint32_t min_id = static_cast<uint32_t>( std::stoul(match[1].str()) );
-					uint32_t max_id = static_cast<uint32_t>( std::stoul(match[2].str()) );
-					
-					if (min_id <= id && id <= max_id)
-					{
-						return entry.path().string() + "/" + std::to_string(id) + ".txt";
-					}
-				}					
-			}
-		}
-		
-		return "none";//path_to_no_file_;
-	}
-	
-	bool DirIsReady(const fs::path& path)
-	{
-		std::string path_stem = path.stem().string();
-		
-		if ( path_stem.substr(path_stem.length() - 3) == ready_dir_marker_ )
-			return true;
-		
-		return false;
-	}
-	
-	void InspectDir(const std::string& directory_path, AuxiliaryIndex& ai)
-	{
-		for (const auto& entry : fs::directory_iterator(directory_path))
-		{
-			if (entry.path().extension() == ".txt")
-			{
-				tasks_pool_.push_back(entry.path().string());
-				split(entry.path(), ai);
-			}
-		}
-	}
-	
-	void PrintTasks()
-	{
-		for (auto v : tasks_pool_)
-			std::cout << v << std::endl;
-	}
-};
-
-
-void run(AuxiliaryIndex& ai_many)
-{
-	size_t num_of_segments = 10;          
-	//std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
-	//std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
-	//AuxiliaryIndex ai_many(num_of_segments, ma, me);
-
-	std::string dirs[4] = {
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/1", //2 3 4 1
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/2",
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/3",
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/4"
-	};
-
-	int t = 4;
-	std::thread writers[t];
-	for (int i = 0; i < t; ++i)
-		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
-	for (int i = 0; i < t; ++i)
-		writers[i].join();
-
-	size_t total = 0;
-	for (size_t i = 0; i < num_of_segments; ++i){
-		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
-		total += ai_many.SegmentSize(i);
-	}
-	std::cout << "Total :" << total << std::endl;
-
-
-	for (int i = 0; i < 10; ++i)
-		ai_many.MergeAiWithDisk(i);
-
-
-	for (int i = 0; i < t; ++i)
-		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
-	for (int i = 0; i < t; ++i)
-		writers[i].join();
-
-	total = 0;
-	for (size_t i = 0; i < num_of_segments; ++i){
-		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
-		total += ai_many.SegmentSize(i);
-	}
-	std::cout << "Total :" << total << std::endl;
-
-	while (1) { };
-}
-/*
-int main()
-{
-	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	size_t num_of_segments = 10;          
-	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
-	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
-	AuxiliaryIndex ai_many(num_of_segments, ma, me);
-	
-	
-		Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка/testdata/", 1);
-		std::thread t(&Sheduler::MonitorData, &s, std::ref(ai_many));
-		
-		
-		std::this_thread::sleep_for(std::chrono::duration<int>(30));
-	
-	std::cout << "Searching phrase..." << std::endl;
-	uint32_t id = ai_many.ReadPhrase(" (fitness enjoy)4 ");
-	std::cout << "Phrase in id " << id << " path: " << s.GetPathByDocId(id) << std::endl;
-	
-	size_t total = 0;
-	for (size_t i = 0; i < num_of_segments; ++i){
-		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
-		total += ai_many.SegmentSize(i);
-	}
-	std::cout << "Total :" << total << std::endl;
-	
-	t.detach();
-	
-	
-	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	size_t num_of_segments = 10;          
-	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
-	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
-	AuxiliaryIndex ai_many(num_of_segments, ma, me);
-	
-	std::string dirs[4] = {
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/1", //2 3 4 1
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/2",
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/3",
-		"/home/dima/Desktop/БІС/test IR/Новая папка/data/4"
-	}; 
-	
-	//walkdirs(dirs[0], ai_many);
-	//walkdirs(dirs[1], ai_many);
-	//walkdirs(dirs[2], ai_many);
-	//walkdirs(dirs[3], ai_many);
-	
-	int t = 4;
-	std::thread writers[t];
-	for (int i = 0; i < t; ++i)
-		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
-	
-	for (int i = 0; i < t; ++i)
-		writers[i].join();
-
-	size_t total = 0;
-	for (size_t i = 0; i < num_of_segments; ++i){
-		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
-		total += ai_many.SegmentSize(i);
-	}
-	std::cout << "Total :" << total << std::endl;
-	
-	std::cout << "Searching phrase before mearging..." << std::endl;
-	std::cout << "Phrase in " << ai_many.ReadPhrase(" (home-made style) (visual) (effects, awkward dialogue,) ") << std::endl;
-	
-	for (int i = 0; i < 10; ++i)
-		ai_many.MergeAiWithDisk(i);
-
-	for (int i = 0; i < t; ++i)
-		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
-	for (int i = 0; i < t; ++i)
-		writers[i].join();
-
-	total = 0;
-	for (size_t i = 0; i < num_of_segments; ++i){
-		std::cout << i << " " << ai_many.SegmentSize(i) << std::endl;
-		total += ai_many.SegmentSize(i);
-	}
-	std::cout << "Total :" << total << std::endl;
-
-	std::cout << "Searching phrase after mearging..." << std::endl;
-	std::cout << "Phrase in " << ai_many.ReadPhrase(" (home-made style) (visual) (effects, awkward dialogue,) ") << std::endl;
-
-	//std::cout << ai_many.ReadFromDiskIndexLin("and") << std::endl;
-
-	//std::cout << ai_many.ReadFromDiskIndexLog("anytime") << std::endl;
-	//std::cout << ai_many.ReadFromDiskIndexLog("amelioration") << std::endl;
-	//std::cout << ai_many.ReadFromDiskIndexLog("9") << std::endl;
-
-	
-	
-	//std::cout << "Reading from disk..." << std::endl;
-	
-	//std::cout << ai_many.ReadFromDiskIndex("and") << std::endl; //10 4
-	//std::cout << ai_many.ReadFromDiskIndex("south") << std::endl; //238 4
-	//std::cout << ai_many.ReadFromDiskIndex("text") << std::endl; //94 8
-	//std::cout << ai_many.Read("soft-core") << std::endl;
-	
-	
-	/*
-	int t = 4;
-	std::thread writers[t];
-	for (int i = 0; i < t; ++i)
-		writers[i] = std::thread(walkdirs, dirs[i], std::ref(ai_many));
-	
-	for (int i = 0; i < t; ++i)
-		writers[i].join();
-	*/
-	
-	
-
-	
-	//return 0;
-//}
+*/

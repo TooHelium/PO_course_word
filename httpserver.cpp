@@ -13,6 +13,7 @@
 #include <arpa/inet.h>
 
 #include "main.cpp"
+#include "sheduler.cpp"
 
 #define PORT 8080
 #define MY_ADDR "192.168.0.100"
@@ -106,12 +107,17 @@ void HandleRequest(int client_socket, AuxiliaryIndex& ai_many)
 int main() 
 {
     size_t num_of_segments = 10;          
-	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка/main index/";
-	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка/merged index/";
+	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка (copy)/main index/";
+	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка (copy)/merged index/";
 	AuxiliaryIndex ai_many(num_of_segments, ma, me);
 
-    std::thread t(run, std::ref(ai_many));
-    t.detach();
+    std::thread t_ai(run, std::ref(ai_many));
+    t_ai.detach();
+
+    std::cout << "Creating Sheduler..." << std::endl;
+    Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка (copy)/testdata/", &ai_many, 20);
+	std::thread t_s(&Sheduler::MonitorData, &s, std::ref(ai_many));
+    t_s.detach();
 
     std::ifstream file(HTML_ROOT, std::ios::in);
     if (file.is_open()) 
