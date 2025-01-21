@@ -61,7 +61,7 @@ private:
 	
 	size_t num_top_doc_ids_ = 5; //can be set in constuctor
 	
-	size_t max_segment_size_ = 40;
+	size_t max_segment_size_ = 350;
 	
 	struct IndexPath
 	{
@@ -97,7 +97,7 @@ private:
     //void MergeAiWithDisk(size_t i); //TODO
     size_t GetSegmentIndex(const TermType& term);
     bool ReadTermInfoFromDiskLog(const std::string& term, TermsTable& phrases_disk_table); //TODO
-    DocIdType ReadFromDiskIndexLog(const std::string& term); //TODO
+    DocFreqEntry ReadFromDiskIndexLog(const std::string& term); //TODO
     void SplitIntoPhrases(std::string query, std::vector<Phrase>& phrases);
 
 public:
@@ -112,6 +112,8 @@ public:
     void MergeAiWithDisk(size_t i); //TODO
 
 	void ReadFromDiskLogGeneral(const std::string& target_term, std::smatch& matched_line);
+
+	DocIdType f(const std::string& term);
 };
 
 #endif //AUXILIARY_INDEX_H

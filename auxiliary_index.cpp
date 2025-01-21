@@ -276,6 +276,31 @@ void AuxiliaryIndex::SplitIntoPhrases(std::string query, std::vector<Phrase>& ph
     }
 }
 
+
+AuxiliaryIndex::DocIdType AuxiliaryIndex::f(const std::string& term)
+{
+    size_t i = GetSegmentIndex(term);
+    
+    std::shared_lock<std::shared_mutex> _(*segments_[i]);
+    
+    DocFreqEntry top_ai = {};
+
+    auto it = table_[i].find(term);
+    if ( it != table_[i].end() )
+        top_ai = table_[i][term].desc_freq_ranking[0];//table_[i][term].desc_freq_ranking[0].doc_id;
+
+    DocFreqEntry top_disk = ReadFromDiskIndexLog(term);
+
+    std::cout << "(1)ai_max_score " << top_ai.freq << std::endl;
+    std::cout << "(1)ai_doc " << top_ai.doc_id << std::endl;
+
+    std::cout << "(1)disk_max_score " << top_disk.freq << std::endl; 
+    std::cout << "(1)disk_doc " << top_disk.doc_id << std::endl;
+
+    return top_ai.freq > top_disk.freq ? top_ai.doc_id : top_disk.doc_id;
+} 
+
+
 AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
 {
     std::vector<Phrase> phrases;
@@ -285,6 +310,11 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
 
     if (phrases.empty())
         return DocIdType(0);
+
+    if (phrases.size() == 1 && phrases[0].words.size() == 1)
+    {
+        return f(phrases[0].words[0]);
+    } 
     
     std::vector<std::shared_lock<std::shared_mutex>> locks;
     
@@ -815,7 +845,7 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
 }
 
 
-AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string& target_term) //REFACTORED TODO
+AuxiliaryIndex::DocFreqEntry AuxiliaryIndex::ReadFromDiskIndexLog(const std::string& target_term) //REFACTORED TODO
 {
     size_t i = GetSegmentIndex(target_term);
     
@@ -826,7 +856,7 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string
     if (!file)
     {
         std::cerr << "Error opening file for reading: " << index_filename << '\n';
-        return DocIdType(0);
+        return DocFreqEntry();
     }
 
     std::regex term_regex("^([^ ]+):\\[([0-9,]+)\\]");
@@ -861,10 +891,23 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string
         else if (target_term > curr_term)
             left = mid + 1;
         else
-            return static_cast<DocIdType>( std::stoul(match[2].str()) ); //returns the top 1 only
+        {
+            DocFreqEntry top_entry;
+            top_entry.doc_id = std::stoul(match[2].str());
+
+            std::regex top_entry_regex( std::to_string(top_entry.doc_id) + "=" + "(\\d+)" );
+            std::smatch freq_match; 
+            
+            if (std::regex_search(line, freq_match, top_entry_regex))
+                top_entry.freq = static_cast<FreqType>( std::stoul(freq_match[1].str()) ); 
+
+            return top_entry;
+            //return static_cast<DocIdType>( std::stoul(match[2].str()) ); //returns the top 1 only
+        }
+            
     }
 
-    return DocIdType(0);
+    return DocFreqEntry();
 }
 
 
