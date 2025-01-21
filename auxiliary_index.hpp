@@ -49,6 +49,7 @@ private:
 		std::string RankingToString();
 		std::string MapToString();
 		std::string MapEntryToString(const size_t& doc_id);
+		std::string MapEntryWithoutIdToString(const size_t& doc_id); //TYPES
 		void UpdateRanking(const DocFreqEntry& new_entry, size_t num_top);
 	};
 	using TermsTable = std::unordered_map<TermType, TermInfo>;
@@ -60,7 +61,7 @@ private:
 	
 	size_t num_top_doc_ids_ = 5; //can be set in constuctor
 	
-	size_t max_segment_size_ = 400;
+	size_t max_segment_size_ = 100;
 	
 	struct IndexPath
 	{

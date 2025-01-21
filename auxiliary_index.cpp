@@ -71,6 +71,19 @@ std::string AuxiliaryIndex::TermInfo::MapEntryToString(const size_t& doc_id)
     
     return oss.str();
 }
+std::string AuxiliaryIndex::TermInfo::MapEntryWithoutIdToString(const size_t& doc_id)
+{
+    std::ostringstream oss;
+    
+    oss << doc_pos_map[doc_id].size();
+    
+    for (auto it = doc_pos_map[doc_id].begin(); it != doc_pos_map[doc_id].end(); ++it)
+        oss << "," << *it;
+    
+    oss << ";";
+    
+    return oss.str();
+}
 void AuxiliaryIndex::TermInfo::UpdateRanking(const DocFreqEntry& new_entry, size_t num_top)
 {
     if (desc_freq_ranking.size() < num_top 
@@ -551,6 +564,82 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string
 }
 */
 
+size_t MergeTermInfos(std::string& s1, std::string& s2)
+{
+	std::regex num_regex(",(\\d+)");
+	
+	auto s1_begin = std::sregex_iterator(s1.begin(), s1.end(), num_regex);
+	auto s1_end = std::sregex_iterator();
+	
+	auto s2_begin = std::sregex_iterator(s2.begin(), s2.end(), num_regex);
+	auto s2_end = std::sregex_iterator();
+	
+	std::string res = "";
+	std::string prev = res;
+	std::string curr;
+	
+	auto s1_it = s1_begin;
+	
+	int s1_num, s2_num;
+
+    size_t size = 0;
+	
+	auto res_append = [&res, &curr, &prev, &size](auto& s_it) 
+	{	
+		curr = (*s_it)[0].str();
+		
+		if (curr != prev)
+		{
+        	res += curr;
+            ++size;
+        }
+		
+		prev = curr;
+	};
+	
+	for (auto s2_it = s2_begin; s2_it != s2_end; ++s2_it)
+	{
+		if (s1_it == s1_end)
+		{
+			res_append(s2_it);
+			continue;
+		}
+		
+		s2_num = std::stoi( (*s2_it)[1].str() );
+		
+		while (s1_it != s1_end)
+		{
+			s1_num = std::stoi( (*s1_it)[1].str() );
+			if (s1_num < s2_num)
+			{
+				res_append(s1_it);
+				++s1_it;
+			}
+			else if (s1_num > s2_num)
+			{
+				res_append(s2_it);
+				break;
+			}	
+			else
+			{
+				res_append(s1_it);
+				++s1_it;
+				break;
+			}
+		}
+	}
+	while (s1_it != s1_end)
+	{
+		res_append(s1_it);
+		++s1_it;
+	}
+	
+	s1 = res;
+	
+    return size;
+}
+
+
 void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
 {
     std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; 
@@ -583,7 +672,7 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
     
     std::string line;
     std::regex term_regex("^(.+):"); //"\\w+(['-]\\w+)*" maybe to use this?
-    std::regex term_info_regex("\\d+=\\d+,[^;]+;"); //be cautious, my friend
+    std::regex term_info_regex("\\d+=(\\d+,[^;]+);"); //be cautious, my friend
     std::regex doc_freq_regex("(\\d+)=(\\d+)");
     std::smatch match;
     
@@ -629,7 +718,7 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
                 bool skip_line_insert;
                 for (auto it = begin; it != end; ++it)
                 {	
-                    tmp = it->str();
+                    tmp = (*it)[0].str();
                     skip_line_insert = false;
 
                     if (std::regex_search(tmp, df_match_d, doc_freq_regex))
@@ -644,7 +733,25 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
                             }
                             else if (line_doc_id == m_it->first)
                             {
-                                oss << merged_term.MapEntryToString(m_it->first);
+                                std::string s1 = merged_term.MapEntryWithoutIdToString(m_it->first);
+                                std::string s2 = (*it)[1].str();
+                                FreqType f = static_cast<FreqType>( MergeTermInfos(s1, s2) );
+
+                                oss << std::to_string(line_doc_id);
+                                oss << "=";
+                                oss << std::to_string(f);
+                                oss << s1;
+                                oss << ";";
+
+                                merged_term.UpdateRanking
+                                (
+                                    DocFreqEntry{
+                                                    line_doc_id,
+                                                    f
+                                                },
+                                    num_top_doc_ids_
+                                );
+
                                 ++m_it;
                                 skip_line_insert = true;
                                 break;
@@ -700,6 +807,7 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
     
     indexes_paths_[i].UpdateMainIndexPath();
 }
+
 
 
 
