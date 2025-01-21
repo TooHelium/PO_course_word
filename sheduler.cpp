@@ -96,13 +96,13 @@ void Sheduler::InspectDir(const std::string directory_path)
         if (entry.path().extension() == ".txt")
         {
             (void) pool->submit_task( [this, entry] {
-                Split(entry.path());
+                SplitFileInWords(entry.path());
             }, BS::pr::normal);
         }
     }
 }
 
-void Sheduler::Split(const std::filesystem::path& file_path)
+void Sheduler::SplitFileInWords(const std::filesystem::path& file_path)
 {
 	std::ifstream file(file_path.string());
 

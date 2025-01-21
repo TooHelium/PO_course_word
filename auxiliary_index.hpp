@@ -49,7 +49,7 @@ private:
 		std::string RankingToString();
 		std::string MapToString();
 		std::string MapEntryToString(const DocIdType& doc_id);
-		std::string MapEntryWithoutIdToString(const DocIdType& doc_id); //TYPES
+		std::string MapEntryWithoutIdToString(const DocIdType& doc_id);
 		void UpdateRanking(const DocFreqEntry& new_entry, size_t num_top);
 	};
 	using TermsTable = std::unordered_map<TermType, TermInfo>;
@@ -59,9 +59,9 @@ private:
 	size_t num_segments_;
 	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
 	
-	size_t num_top_doc_ids_ = 5; //can be set in constuctor
+	size_t num_top_doc_ids_; //can be set in constuctor
 	
-	size_t max_segment_size_ = 100;
+	size_t max_segment_size_;
 	
 	struct IndexPath
 	{
@@ -94,26 +94,20 @@ private:
 		size_t FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms, size_t distance); 
 	};
 
-    //void MergeAiWithDisk(size_t i); //TODO
+private:
     size_t GetSegmentIndex(const TermType& term);
-    bool ReadTermInfoFromDiskLog(const TermType& term, TermsTable& phrases_disk_table); //TODO
+    void ReadTermInfoFromDiskLog(const TermType& term, TermsTable& phrases_disk_table); //TODO
     DocFreqEntry ReadFromDiskIndexLog(const TermType& term); //TODO
     void SplitIntoPhrases(std::string query, std::vector<Phrase>& phrases);
+	void MergeAiWithDisk(size_t i); //TODO
+	DocIdType ReadOneWord(const TermType& term);
 
 public:
 	AuxiliaryIndex(size_t s, const std::string& ma, const std::string& me);
 
-    DocIdType Read(const TermType& term);
 	void Write(const TermType& term, const DocIdType& doc_id, const PosType& term_position);
     DocIdType ReadPhrase(const std::string& query);
-
 	size_t SegmentSize(size_t i); //TODO syncronization
-
-    void MergeAiWithDisk(size_t i); //TODO
-
-	void ReadFromDiskLogGeneral(const TermType& target_term, std::smatch& matched_line);
-
-	DocIdType f(const TermType& term);
 };
 
 #endif //AUXILIARY_INDEX_H

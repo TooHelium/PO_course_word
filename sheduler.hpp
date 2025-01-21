@@ -34,7 +34,7 @@ public:
 	
 	void InspectDir(const std::string directory_path);
 
-    void Split(const std::filesystem::path& file_path);
+    void SplitFileInWords(const std::filesystem::path& file_path);
 };
 
 #endif //SHEDULER_H
