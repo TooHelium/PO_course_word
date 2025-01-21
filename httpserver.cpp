@@ -44,6 +44,8 @@
 
 std::string content_root;
 
+std::mutex print_mutex;
+
 using DecodeRule = std::pair<std::regex, std::string>;
 
 std::vector<DecodeRule> url_decoding_map = {

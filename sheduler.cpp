@@ -18,12 +18,16 @@ Sheduler::Sheduler(const std::string dp, AuxiliaryIndex* ai_many, BS::thread_poo
     ai = ai_many;
     pool = thread_pool;
     duration_ = std::chrono::seconds( sleep_duration );
+    mtx_ptr = std::make_unique<std::shared_mutex>();
+    
+    id_range_regex = std::regex("(\\d+)-(\\d+)");
+    word_regex = std::regex("\\w+(['-]\\w+)*");
 }
 
 void Sheduler::MonitorData()
 {
-    std::string curr_dir;
-    
+    std::filesystem::path curr_dir;
+
     while (1)
     {
         std::this_thread::sleep_for(duration_);
@@ -32,13 +36,17 @@ void Sheduler::MonitorData()
         {
             if (std::filesystem::is_directory(entry.path()) && DirIsReady(entry.path()))
             {		
-                curr_dir = entry.path().string();
-            
-                if (monitored_dirs_.find(curr_dir) == monitored_dirs_.end())
+                curr_dir = entry.path();
+
+                std::unique_lock<std::shared_mutex> _(*mtx_ptr);
+
+                if ( !monitored_dirs_.count(curr_dir) )
                 {
-                    std::cout << "New directory " << curr_dir << std::endl;
+                    //std::cout << "New directory " << curr_dir.string() << std::endl;
+
                     monitored_dirs_.insert(curr_dir);
-                    InspectDir(curr_dir);
+
+                    InspectDir(curr_dir.string());
                 }
             }
         }
@@ -50,28 +58,25 @@ std::string Sheduler::GetPathByDocId(const uint32_t id)
     if (id == 0)
         return "none";
 
-    std::regex id_range_regex("(\\d+)-(\\d+)");
     std::smatch match;
+    std::string tmp;
+ 
+    std::shared_lock<std::shared_mutex> _(*mtx_ptr);
 
-    for (const auto& entry : std::filesystem::directory_iterator(data_path_))
+    for (const std::filesystem::path& dir_path : monitored_dirs_)
     {
-        if (std::filesystem::is_directory(entry.path()) && DirIsReady(entry.path()))
+        tmp = dir_path.stem().string();
+        if (std::regex_search(tmp, match, id_range_regex))
         {
-            std::string tmp = entry.path().stem().string();
-            if (std::regex_search(tmp, match, id_range_regex))
-            {
-                uint32_t min_id = static_cast<uint32_t>( std::stoul(match[1].str()) );
-                uint32_t max_id = static_cast<uint32_t>( std::stoul(match[2].str()) );
-                
-                if (min_id <= id && id <= max_id)
-                {
-                    return entry.path().string() + "/" + std::to_string(id) + ".txt";
-                }
-            }					
+            uint32_t min_id = static_cast<uint32_t>( std::stoul(match[1].str()) );
+            uint32_t max_id = static_cast<uint32_t>( std::stoul(match[2].str()) );
+            
+            if (min_id <= id && id <= max_id)
+                return dir_path.string() + "/" + std::to_string(id) + ".txt";
         }
     }
 
-    return "none";//path_to_no_file_;
+    return "none";
 }
 
 bool Sheduler::DirIsReady(const std::filesystem::path& path)
@@ -84,8 +89,7 @@ bool Sheduler::DirIsReady(const std::filesystem::path& path)
     return false;
 }
 
-
-void Sheduler::InspectDir(const std::string& directory_path)
+void Sheduler::InspectDir(const std::string directory_path)
 {
     for (const auto& entry : std::filesystem::directory_iterator(directory_path))
     {
@@ -101,30 +105,28 @@ void Sheduler::InspectDir(const std::string& directory_path)
 void Sheduler::Split(const std::filesystem::path& file_path)
 {
 	std::ifstream file(file_path.string());
-	
+
 	if (!file)
 	{
-		std::cout << "Error opening file\n";
+		std::cerr << "Error opening file to split: " << file_path.string() << '\n';
 		return;
 	}
 	
 	std::string filename = file_path.stem().string();
-	//filename.erase(filename.size() - 2); // erasing '_i' part !!!!!!!!!!!!!!!!!!!!!!!!!
 	uint32_t doc_id = static_cast<uint32_t>( std::stoul(filename) );
 		
 	uint32_t word_position = 1;
 	
 	std::string line;
-	std::regex word_regex("\\w+(['-]\\w+)*");
 
 	while ( std::getline(file, line) )
 	{
 		auto first_word = std::sregex_iterator(line.begin(), line.end(), word_regex);
 		auto last_word = std::sregex_iterator();
 		
-		for (std::sregex_iterator i = first_word; i != last_word; ++i)
+		for (std::sregex_iterator it = first_word; it != last_word; ++it)
 		{
-			std::smatch match = *i;
+			std::smatch match = *it;
 			std::string match_str = match.str();
 			
 			std::transform(match_str.begin(), match_str.end(), match_str.begin(), 
@@ -133,6 +135,4 @@ void Sheduler::Split(const std::filesystem::path& file_path)
 			ai->Write(match_str, doc_id, word_position++);
 		}
 	}
-	
-	file.close();
 }

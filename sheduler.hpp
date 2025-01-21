@@ -7,8 +7,7 @@
 #include <string>
 #include <vector>
 #include <unordered_set>
-
-//#include "auxiliary_index.hpp"
+#include <regex>
 
 
 class Sheduler 
@@ -18,7 +17,10 @@ public:
 	BS::thread_pool<4>* pool;
 	std::string data_path_;
 	std::chrono::duration<size_t> duration_;
-	std::unordered_set<std::string> monitored_dirs_;
+	std::unordered_set<std::filesystem::path> monitored_dirs_;
+	std::unique_ptr<std::shared_mutex> mtx_ptr;
+	std::regex id_range_regex;
+	std::regex word_regex;
 	const std::string ready_dir_marker_ = "___"; // 3 underscores
 	
 public:
@@ -30,7 +32,7 @@ public:
 	
 	bool DirIsReady(const std::filesystem::path& path);
 	
-	void InspectDir(const std::string& directory_path);
+	void InspectDir(const std::string directory_path);
 
     void Split(const std::filesystem::path& file_path);
 };

@@ -48,8 +48,8 @@ private:
     public:
 		std::string RankingToString();
 		std::string MapToString();
-		std::string MapEntryToString(const size_t& doc_id);
-		std::string MapEntryWithoutIdToString(const size_t& doc_id); //TYPES
+		std::string MapEntryToString(const DocIdType& doc_id);
+		std::string MapEntryWithoutIdToString(const DocIdType& doc_id); //TYPES
 		void UpdateRanking(const DocFreqEntry& new_entry, size_t num_top);
 	};
 	using TermsTable = std::unordered_map<TermType, TermInfo>;
@@ -84,20 +84,20 @@ private:
 		std::vector<TermType> words;
         std::vector<TermType> ai_words;
         std::vector<TermType> disk_words;
-		std::vector<TermInfo*> ai_terms; //we can not have vectors of reference in simple way RENAME
+		std::vector<TermInfo*> ai_terms;
 		std::vector<TermInfo*> disk_terms;
 		size_t words_distance;
         size_t ai_distance;
         size_t disk_distance;
 		
     public:
-		size_t FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms, size_t distance); //somehow we need to make them wait for each other
+		size_t FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms, size_t distance); 
 	};
 
     //void MergeAiWithDisk(size_t i); //TODO
     size_t GetSegmentIndex(const TermType& term);
-    bool ReadTermInfoFromDiskLog(const std::string& term, TermsTable& phrases_disk_table); //TODO
-    DocFreqEntry ReadFromDiskIndexLog(const std::string& term); //TODO
+    bool ReadTermInfoFromDiskLog(const TermType& term, TermsTable& phrases_disk_table); //TODO
+    DocFreqEntry ReadFromDiskIndexLog(const TermType& term); //TODO
     void SplitIntoPhrases(std::string query, std::vector<Phrase>& phrases);
 
 public:
@@ -111,9 +111,9 @@ public:
 
     void MergeAiWithDisk(size_t i); //TODO
 
-	void ReadFromDiskLogGeneral(const std::string& target_term, std::smatch& matched_line);
+	void ReadFromDiskLogGeneral(const TermType& target_term, std::smatch& matched_line);
 
-	DocIdType f(const std::string& term);
+	DocIdType f(const TermType& term);
 };
 
 #endif //AUXILIARY_INDEX_H

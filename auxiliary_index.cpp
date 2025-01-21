@@ -58,7 +58,7 @@ std::string AuxiliaryIndex::TermInfo::MapToString()
     
     return oss.str();
 }
-std::string AuxiliaryIndex::TermInfo::MapEntryToString(const size_t& doc_id)
+std::string AuxiliaryIndex::TermInfo::MapEntryToString(const DocIdType& doc_id)
 {
     std::ostringstream oss;
     
@@ -71,7 +71,7 @@ std::string AuxiliaryIndex::TermInfo::MapEntryToString(const size_t& doc_id)
     
     return oss.str();
 }
-std::string AuxiliaryIndex::TermInfo::MapEntryWithoutIdToString(const size_t& doc_id)
+std::string AuxiliaryIndex::TermInfo::MapEntryWithoutIdToString(const DocIdType& doc_id)
 {
     std::ostringstream oss;
     
