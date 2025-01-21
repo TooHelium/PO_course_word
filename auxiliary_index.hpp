@@ -60,7 +60,7 @@ private:
 	
 	size_t num_top_doc_ids_ = 5; //can be set in constuctor
 	
-	size_t max_segment_size_ = 1000;
+	size_t max_segment_size_ = 400;
 	
 	struct IndexPath
 	{
@@ -109,6 +109,8 @@ public:
 	size_t SegmentSize(size_t i); //TODO syncronization
 
     void MergeAiWithDisk(size_t i); //TODO
+
+	void ReadFromDiskLogGeneral(const std::string& target_term, std::smatch& matched_line);
 };
 
 #endif //AUXILIARY_INDEX_H

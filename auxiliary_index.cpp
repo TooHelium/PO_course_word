@@ -338,6 +338,8 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
         }
     }//new version
 
+    //std::cout << phrases.
+
     //AI best score
     DocIdType curr_doc_id;
     DocIdType ai_best_doc_id = 0;
@@ -393,147 +395,59 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
 
     //release the locks
 }
-
-bool AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& term, TermsTable& phrases_disk_table) //TODO
+/*
+bool AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& target_term, TermsTable& phrases_disk_table) //NEW
 {
-    if ( phrases_disk_table.find(term) != phrases_disk_table.end() )
-        return true;
-    
-    size_t i = GetSegmentIndex(term);
-    
-    std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; //change path to main index
-        
-    std::ifstream file(index_filename);
-
-    int counter = 0; //DELETE TODO
-
-    if (!file)
-    {
-        std::cout << "Error opening file (index) " << index_filename << std::endl;
-    }
-    else
-    {
-        std::regex term_regex("^([^ ]+):\\[([0-9,]+)\\]([^\\s\\n]+)$");
-        std::smatch match;
-        std::string line;
-        std::string tmp;
-
-        uint64_t left = 0;
-        file.seekg(0, std::ios::end);
-        uint64_t right = static_cast<uint64_t>( file.tellg() );
-        uint64_t mid;
-
-        while(left <= right)
-        {
-            mid = (left + right) / 2;
-            file.seekg(mid);
-            
-            while (file.tellg() > 0 && file.peek() != '\n')
-                file.seekg(file.tellg() - static_cast<std::streamoff>(1));
-    
-            if (file.peek() == '\n')
-                file.seekg(file.tellg() + static_cast<std::streamoff>(1));
-            
-            auto start = file.tellg(); //or mid
-            std::getline(file, line);
-            if (std::regex_search(line, match, term_regex))
-            {
-                tmp = match[1].str();
-                //std::cout << tmp << std::endl;
-            }
-                
-            if (term < tmp)
-                right = mid - 1;
-            else if (term > tmp)
-                left = mid + 1;
-            else
-            {
-                std::string curr = match[3].str();
-
-                //std::vector<std::pair<DocIdType, std::vector<PosType>>> term_info;
-
-                std::regex doc_pos_regex("([\\d]+)=\\d+(,\\d+)+;");
-                std::regex num_regex("[0-9]+");
-                
-                std::string nums;
-                DocIdType doc_id;
-                PosType pos;
-
-                for (std::sregex_iterator it(curr.begin(), curr.end(), doc_pos_regex), last; it != last; ++it)
-                {
-                    nums = it->str();
-                
-                    std::sregex_iterator ri(nums.begin(), nums.end(), num_regex), last_num;
-                    doc_id = static_cast<DocIdType>( std::stoul(ri->str()) );
-                    ++++ri; //pass frequency
-                    pos = static_cast<PosType>( std::stoul(ri->str()) );
-
-                    std::vector<PosType>& positions = phrases_disk_table[term].doc_pos_map[doc_id];
-                    positions.push_back(pos);
-
-                    while ( ++ri != last_num )
-                        positions.push_back( static_cast<PosType>( std::stoul(ri->str()) ) );
-                    //term_info.push_back( {doc_id, {pos}} );
-                    
-                    //while ( ++ri != last_num )
-                    //	term_info[term_info.size() - 1].second.push_back( static_cast<int>( std::stoul(ri->str()) ) ); 
-                }
-                
-                file.close();
-                //return term_info; 
-                return true;
-            }
-        }
-        file.close();
-        
+    if ( phrases_disk_table.find(target_term) != phrases_disk_table.end() )
         return false;
-    }
 
-    return false;
-}
+    std::smatch matched_line;
 
+    ReadFromDiskLogGeneral(target_term, matched_line);
 
-AuxiliaryIndex::DocIdType AuxiliaryIndex::Read(const TermType& term) 
-{
-    size_t i = GetSegmentIndex(term);
-    
-    std::shared_lock<std::shared_mutex> _(*segments_[i]);
-    
-    auto it = table_[i].find(term);
-    if ( it == table_[i].end() ) //maybe go out mutex
-        return 0;
-    
-    return table_[i][term].desc_freq_ranking[0].doc_id;
-}
+    if (matched_line.empty())
+        return false;
 
-void AuxiliaryIndex::Write(const TermType& term, const DocIdType& doc_id, const PosType& term_position)
-{
-    size_t i = GetSegmentIndex(term);
-    
-    std::unique_lock<std::shared_mutex> _(*segments_[i]); //!!!!!maybe star * to go out the scope
-    
-    std::vector<PosType>& positions = table_[i][term].doc_pos_map[doc_id];
-    positions.push_back(term_position);
-    
-    table_[i][term].UpdateRanking( DocFreqEntry{doc_id, positions.size()}, num_top_doc_ids_ ); //maybe make it static for CLASS, eh?
-    
-    if ( table_[i].size() > max_segment_size_ )
-        MergeAiWithDisk(i);
-}
+    std::string curr = matched_line[3].str();
 
-size_t AuxiliaryIndex::SegmentSize(size_t i) //REFACTORED TODO
-{
-    if (i < table_.size())
+    std::regex doc_pos_regex("([\\d]+)=\\d+(,\\d+)+;");
+    std::regex num_regex("[0-9]+");
+    
+    std::string nums;
+    DocIdType doc_id;
+    std::vector<PosType> *positions;
+
+    for (std::sregex_iterator it(curr.begin(), curr.end(), doc_pos_regex), last; it != last; ++it)
     {
-        std::shared_lock<std::shared_mutex> _(*segments_[i]);
-        return table_[i].size();
+        nums = it->str();
+    
+        std::sregex_iterator ri(nums.begin(), nums.end(), num_regex), last_num;
+        doc_id = static_cast<DocIdType>( std::stoul(ri->str()) );
+        ++ri; //pass frequency
+
+        positions = &( phrases_disk_table[target_term].doc_pos_map[doc_id] );
+
+        while ( ++ri != last_num )
+            positions->push_back( static_cast<PosType>( std::stoul(ri->str()) ) );
     }
-        
-    return 0;
-}
+    
+    return true;
 
+   /* nums = it->str();
+    
+    std::sregex_iterator ri(nums.begin(), nums.end(), num_regex), last_num;
+    doc_id = static_cast<DocIdType>( std::stoul(ri->str()) );
+    ++++ri; //pass frequency
+    pos = static_cast<PosType>( std::stoul(ri->str()) );
 
-AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string& target_term) //REFACTORED TODO
+    positions = &( phrases_disk_table[target_term].doc_pos_map[doc_id] );
+    positions->push_back(pos);
+
+    while ( ++ri != last_num )
+        positions->push_back( static_cast<PosType>( std::stoul(ri->str()) ) );*/
+//}
+
+void AuxiliaryIndex::ReadFromDiskLogGeneral(const std::string& target_term, std::smatch& matched_line)
 {
     size_t i = GetSegmentIndex(target_term);
     
@@ -544,11 +458,10 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string
     if (!file)
     {
         std::cerr << "Error opening file for reading: " << index_filename << '\n';
-        return DocIdType(0);
+        return;
     }
 
-    std::regex term_regex("^([^ ]+):\\[([0-9,]+)\\]");
-    std::smatch match;
+    std::regex term_regex("^([^ ]+):\\[([0-9,]+)\\]([^\\s\\n]+)$");
     std::string line;
     std::string curr_term;
 
@@ -571,20 +484,72 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string
         
         auto start = file.tellg();
         std::getline(file, line);
-        if (std::regex_search(line, match, term_regex))
-            curr_term = match[1].str();
+        if (std::regex_search(line, matched_line, term_regex))
+            curr_term = matched_line[1].str();
             
         if (target_term < curr_term)
             right = mid - 1;
         else if (target_term > curr_term)
             left = mid + 1;
         else
-            return static_cast<DocIdType>( std::stoul(match[2].str()) ); //returns the top 1 only
+            return;
     }
-
-    return DocIdType(0);
 }
 
+AuxiliaryIndex::DocIdType AuxiliaryIndex::Read(const TermType& term) //REFACTORED TODO
+{
+    size_t i = GetSegmentIndex(term);
+    
+    std::shared_lock<std::shared_mutex> _(*segments_[i]);
+    
+    auto it = table_[i].find(term);
+    if ( it == table_[i].end() )
+        return DocIdType(0);
+    
+    return table_[i][term].desc_freq_ranking[0].doc_id;
+}
+
+
+void AuxiliaryIndex::Write(const TermType& term, const DocIdType& doc_id, const PosType& term_position) //REFACTORED TODO
+{
+    size_t i = GetSegmentIndex(term);
+    
+    std::unique_lock<std::shared_mutex> _(*segments_[i]);
+    
+    std::vector<PosType>& positions = table_[i][term].doc_pos_map[doc_id];
+    positions.push_back(term_position);
+    
+    table_[i][term].UpdateRanking( DocFreqEntry{doc_id, positions.size()}, num_top_doc_ids_ ); //maybe make it static for CLASS, eh?
+    
+    if ( table_[i].size() > max_segment_size_ )
+        MergeAiWithDisk(i);
+}
+
+
+size_t AuxiliaryIndex::SegmentSize(size_t i) //REFACTORED TODO
+{
+    if (i < table_.size())
+    {
+        std::shared_lock<std::shared_mutex> _(*segments_[i]);
+        return table_[i].size();
+    }
+        
+    return 0;
+}
+
+/*
+AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string& target_term) //NEW
+{
+    std::smatch matched_line;
+
+    ReadFromDiskLogGeneral(target_term, matched_line);
+
+    if (matched_line.empty())
+        return DocIdType(0);
+
+    return static_cast<DocIdType>( std::stoul(matched_line[2].str()) ); //returns the top 1 only
+}
+*/
 
 void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
 {
@@ -735,3 +700,146 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
     
     indexes_paths_[i].UpdateMainIndexPath();
 }
+
+
+
+
+
+AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string& target_term) //REFACTORED TODO
+{
+    size_t i = GetSegmentIndex(target_term);
+    
+    std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt";
+        
+    std::ifstream file(index_filename);
+
+    if (!file)
+    {
+        std::cerr << "Error opening file for reading: " << index_filename << '\n';
+        return DocIdType(0);
+    }
+
+    std::regex term_regex("^([^ ]+):\\[([0-9,]+)\\]");
+    std::smatch match;
+    std::string line;
+    std::string curr_term;
+
+    uint64_t left = 0;
+    file.seekg(0, std::ios::end);
+    uint64_t right = static_cast<uint64_t>( file.tellg() );
+    uint64_t mid;
+    std::streamoff one_offset = static_cast<std::streamoff>(1);
+
+    while(left <= right)
+    {
+        mid = (left + right) / 2;
+        file.seekg(mid);
+        
+        while (file.tellg() > 0 && file.peek() != '\n')
+            file.seekg(file.tellg() - one_offset);
+
+        if (file.peek() == '\n')
+            file.seekg(file.tellg() + one_offset);
+        
+        auto start = file.tellg();
+        std::getline(file, line);
+        if (std::regex_search(line, match, term_regex))
+            curr_term = match[1].str();
+            
+        if (target_term < curr_term)
+            right = mid - 1;
+        else if (target_term > curr_term)
+            left = mid + 1;
+        else
+            return static_cast<DocIdType>( std::stoul(match[2].str()) ); //returns the top 1 only
+    }
+
+    return DocIdType(0);
+}
+
+
+
+
+
+
+bool AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& term, TermsTable& phrases_disk_table) //TODO
+{
+    if ( phrases_disk_table.find(term) != phrases_disk_table.end() )
+        return false;
+    
+    size_t i = GetSegmentIndex(term);
+    
+    std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt";
+        
+    std::ifstream file(index_filename);
+
+    if (!file)
+    {
+        std::cerr << "Error opening file for reading: " << index_filename << '\n';
+        return false;
+    }
+    
+    std::regex term_regex("^([^ ]+):\\[([0-9,]+)\\]([^\\s\\n]+)$");
+    std::smatch match;
+    std::string line;
+    std::string tmp;
+
+    uint64_t left = 0;
+    file.seekg(0, std::ios::end);
+    uint64_t right = static_cast<uint64_t>( file.tellg() );
+    uint64_t mid;
+
+    while(left <= right)
+    {
+        mid = (left + right) / 2;
+        file.seekg(mid);
+        
+        while (file.tellg() > 0 && file.peek() != '\n')
+            file.seekg(file.tellg() - static_cast<std::streamoff>(1));
+
+        if (file.peek() == '\n')
+            file.seekg(file.tellg() + static_cast<std::streamoff>(1));
+        
+        auto start = file.tellg(); //or mid
+        std::getline(file, line);
+        if (std::regex_search(line, match, term_regex))
+            tmp = match[1].str();
+            
+        if (term < tmp)
+            right = mid - 1;
+        else if (term > tmp)
+            left = mid + 1;
+        else
+        {
+            std::string curr = match[3].str();
+
+            std::regex doc_pos_regex("([\\d]+)=\\d+(,\\d+)+;");
+            std::regex num_regex("[0-9]+");
+            
+            std::string nums;
+            DocIdType doc_id;
+            PosType pos;
+
+            for (std::sregex_iterator it(curr.begin(), curr.end(), doc_pos_regex), last; it != last; ++it)
+            {
+                nums = it->str();
+            
+                std::sregex_iterator ri(nums.begin(), nums.end(), num_regex), last_num;
+                doc_id = static_cast<DocIdType>( std::stoul(ri->str()) );
+                ++++ri; //pass frequency
+                pos = static_cast<PosType>( std::stoul(ri->str()) );
+
+                std::vector<PosType>& positions = phrases_disk_table[term].doc_pos_map[doc_id];
+                positions.push_back(pos);
+
+                while ( ++ri != last_num )
+                    positions.push_back( static_cast<PosType>( std::stoul(ri->str()) ) );
+            }
+            
+            return true;
+        }
+    }
+    
+    return false;
+}
+
