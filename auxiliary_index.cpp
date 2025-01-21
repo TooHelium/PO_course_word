@@ -317,18 +317,22 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
     
     std::vector<std::shared_lock<std::shared_mutex>> locks;
     
-    //std::unordered_set<size_t> acquired_segments;
+    std::unordered_set<size_t> acquired_segments;
 
     for (Phrase& phrase : phrases) //new versioin
     {
         for (const TermType& word : phrase.words)
         {
             size_t i = GetSegmentIndex(word);
-            locks.emplace_back(*segments_[i]);
-            //acquired_segments.insert(i);
+            if ( !acquired_segments.count(i) ) //if not present
+            {
+                acquired_segments.insert(i);
+                locks.emplace_back(*segments_[i]);
+            }
+
             auto it = table_[i].find(word);
             if (it != table_[i].end())
-                phrase.ai_terms.push_back( &(it->second) ); //RENAME terms in its struct
+                phrase.ai_terms.push_back( &(it->second) );
             else
             {
                 phrase.ai_words.erase( std::find(phrase.ai_words.begin(), phrase.ai_words.end(), word) );
