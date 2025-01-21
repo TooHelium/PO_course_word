@@ -61,7 +61,7 @@ private:
 	
 	size_t num_top_doc_ids_ = 5; //can be set in constuctor
 	
-	size_t max_segment_size_ = 350;
+	size_t max_segment_size_ = 100;
 	
 	struct IndexPath
 	{

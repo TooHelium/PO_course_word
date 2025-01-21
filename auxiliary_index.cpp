@@ -150,12 +150,13 @@ size_t AuxiliaryIndex::Phrase::FindIn(DocIdType doc_id, std::vector<TermInfo*>& 
     {
         auto it = term->doc_pos_map.find(doc_id);
         if (it == term->doc_pos_map.end())
-            return 0;//false; YOU HAVE AN IDEA HERE TO NOT RETURN (search will return for any phare then)
-        pos_vectors.push_back(&(it->second)); //get address of positions pos_vector
+            ++distance;//return 0;//false; YOU HAVE AN IDEA HERE TO NOT RETURN (search will return for any phare then)
+        else
+            pos_vectors.push_back(&(it->second)); //get address of positions pos_vector
     }			
     
     //use score function?
-    size_t num_terms = terms.size();
+    size_t num_terms = pos_vectors.size();//terms.size();
     std::vector<size_t> indexes(num_terms, 0);
     std::vector<long long int> sliding_window(num_terms); //should be of type PosType, but then i need to use static_case in std::abs
     
@@ -312,38 +313,11 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
         return DocIdType(0);
 
     if (phrases.size() == 1 && phrases[0].words.size() == 1)
-    {
         return f(phrases[0].words[0]);
-    } 
     
     std::vector<std::shared_lock<std::shared_mutex>> locks;
     
     //std::unordered_set<size_t> acquired_segments;
-    /*
-    for (Phrase& phrase : phrases) //old versioin
-    {
-        for (const TermType& word : phrase.words)
-        {
-            size_t i = GetSegmentIndex(word);
-            locks.emplace_back(*segments_[i]);
-            //acquired_segments.insert(i);
-            auto it = table_[i].find(word);
-            if (it != table_[i].end())
-                phrase.ai_terms.push_back( &(it->second) ); //RENAME terms in its struct
-            else
-                return DocIdType(0);//attention WILL WE RELEASE LOCKS HERE !!!!!!!!!!!!!!!
-
-            if ( !ReadTermInfoFromDiskLog(word, phrases_disk_table) )
-                return DocIdType(0);
-
-            it = phrases_disk_table.find(word);
-            if (it != phrases_disk_table.end())
-                phrase.disk_terms.push_back( &(it->second) );
-            else
-                return DocIdType(0); 
-        }
-    }//old version
-    */
 
     for (Phrase& phrase : phrases) //new versioin
     {
@@ -358,13 +332,8 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
             else
             {
                 phrase.ai_words.erase( std::find(phrase.ai_words.begin(), phrase.ai_words.end(), word) );
-                //phrase.words.erase(word);
                 phrase.ai_distance += 1;
-                //return DocIdType(0);//attention WILL WE RELEASE LOCKS HERE !!!!!!!!!!!!!!!
             }
-
-            //if ( !ReadTermInfoFromDiskLog(word, phrases_disk_table) )
-            //    return DocIdType(0);
 
             ReadTermInfoFromDiskLog(word, phrases_disk_table);
 
@@ -374,14 +343,11 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
             else
             {
                 phrase.disk_words.erase( std::find(phrase.disk_words.begin(), phrase.disk_words.end(), word) );
-                //return DocIdType(0);
                 phrase.disk_distance += 1;
             }
                  
         }
-    }//new version
-
-    //std::cout << phrases.
+    }
 
     //AI best score
     DocIdType curr_doc_id;
@@ -435,9 +401,6 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
     std::cout << "disk_doc " << disk_best_doc_id << std::endl;
 
     return ai_max_score > disk_max_score ? ai_best_doc_id : disk_best_doc_id;
-    
-
-    //now go to disk until segments are locked
 
     //release the locks
 }

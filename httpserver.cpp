@@ -117,7 +117,7 @@ void HandleRequest(int& client_socket, AuxiliaryIndex& ai_many, Sheduler& shedul
 
     send(client_socket, http_response.c_str(), http_response.size(), 0); 
 
-    sleep(1);
+    //sleep(1);
     close(client_socket);
 }
 
@@ -180,7 +180,7 @@ int main()
         return 1;
     }
 
-    if (-1 == listen(server_socket, 5)) 
+    if (-1 == listen(server_socket, 120)) 
     {
         std::cerr << "Listen failed\n";
         close(server_socket);
