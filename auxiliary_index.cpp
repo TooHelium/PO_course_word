@@ -357,7 +357,7 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
     DocIdType curr_doc_id;
     DocIdType ai_best_doc_id = 0;
     size_t curr_score = 0;
-    size_t max_score = curr_score;
+    size_t ai_max_score = curr_score;
 
     if ( !phrases[0].ai_terms.empty() )
     {
@@ -369,9 +369,9 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
             for (Phrase& phrase : phrases)
                 curr_score += phrase.FindIn(curr_doc_id, phrase.ai_terms, phrase.ai_distance);
             
-            if (curr_score > max_score)
+            if (curr_score > ai_max_score)
             {
-                max_score = curr_score;
+                ai_max_score = curr_score;
                 ai_best_doc_id = curr_doc_id;
             }
         }
@@ -382,7 +382,7 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
 
     DocIdType disk_best_doc_id = 0;
     curr_score = 0;
-    max_score = curr_score;
+    size_t disk_max_score = curr_score;
     for (const auto& pair : phrases[0].disk_terms[0]->doc_pos_map)
     {	
         curr_doc_id = pair.first;
@@ -391,23 +391,24 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
         for (Phrase& phrase : phrases)
             curr_score += phrase.FindIn(curr_doc_id, phrase.disk_terms, phrase.disk_distance);
         
-        if (curr_score > max_score)
+        if (curr_score > disk_max_score)
         {
-            max_score = curr_score;
+            disk_max_score = curr_score;
             disk_best_doc_id = curr_doc_id;
         }
     }
 
-    std::cout << "ai_best_doc_id " << ai_best_doc_id << std::endl;
-    std::cout << "disk_best_doc_id " << disk_best_doc_id << std::endl; 
+    std::cout << "ai_max_score " << ai_max_score << std::endl;
+    std::cout << "disk_max_score " << disk_max_score << std::endl; 
 
-    return ai_best_doc_id > disk_best_doc_id ? ai_best_doc_id : disk_best_doc_id;
+    return ai_max_score > disk_max_score ? ai_best_doc_id : disk_best_doc_id;
     
 
     //now go to disk until segments are locked
 
     //release the locks
 }
+
 /*
 bool AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& target_term, TermsTable& phrases_disk_table) //NEW
 {
@@ -458,7 +459,7 @@ bool AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& target_term, Ter
 
     while ( ++ri != last_num )
         positions->push_back( static_cast<PosType>( std::stoul(ri->str()) ) );*/
-//}
+//}*/
 
 void AuxiliaryIndex::ReadFromDiskLogGeneral(const std::string& target_term, std::smatch& matched_line)
 {
@@ -807,10 +808,6 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
     
     indexes_paths_[i].UpdateMainIndexPath();
 }
-
-
-
-
 
 
 AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadFromDiskIndexLog(const std::string& target_term) //REFACTORED TODO
