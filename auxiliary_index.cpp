@@ -135,73 +135,73 @@ std::string AuxiliaryIndex::IndexPath::GetMergeIndexPath()
 
 
 size_t AuxiliaryIndex::Phrase::FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms, size_t distance) //somehow we need to make them wait for each other
-		{
-			std::vector<std::vector<PosType>*> pos_vectors;
-			
-			if (terms.size() == 1) //TODO MAYBE MERGE WITH NEXT CODE
-			{
-				auto it = terms[0]->doc_pos_map.find(doc_id);
-				if (it == terms[0]->doc_pos_map.end())
-					return 0;
-				return it->second.size();
-			}
+{
+    std::vector<std::vector<PosType>*> pos_vectors;
+    
+    if (terms.size() == 1) //TODO MAYBE MERGE WITH NEXT CODE
+    {
+        auto it = terms[0]->doc_pos_map.find(doc_id);
+        if (it == terms[0]->doc_pos_map.end())
+            return 0;
+        return 1;//return it->second.size();
+    }
 
-			for (TermInfo* term : terms)
-			{
-				auto it = term->doc_pos_map.find(doc_id);
-				if (it == term->doc_pos_map.end())
-					return 0;//false; YOU HAVE AN IDEA HERE TO NOT RETURN (search will return for any phare then)
-				pos_vectors.push_back(&(it->second)); //get address of positions pos_vector
-			}			
-			
-			//use score function?
-			size_t num_terms = terms.size();
-			std::vector<size_t> indexes(num_terms, 0);
-			std::vector<long long int> sliding_window(num_terms); //should be of type PosType, but then i need to use static_case in std::abs
-			
-			size_t curr_score = 0;
-			size_t max_score = curr_score;
-			
-			while (1)
-			{
-				for (size_t i = 0; i < num_terms; ++i)
-					sliding_window[i] = (*pos_vectors[i])[indexes[i]];
-				
-				bool is_chain = true;
-				curr_score = 0;
-				for (size_t i = 1; i < num_terms; ++i)
-				{
-					if ( std::abs(sliding_window[i] - sliding_window[i-1]) > distance )
-					{
-						is_chain = false;
-						continue;//break;
-					}
-					++curr_score;
-				}
-				
-				max_score = (curr_score > max_score) ? curr_score : max_score;
-				
-				if (is_chain)
-				{
-					return max_score; //i have an idea to add bonus score for each whole finded phrase. so return will be in the end
-				}
-				
-				size_t min_index = 0;
-				PosType min_value = sliding_window[0];
-				for (size_t i = 1; i < num_terms; ++i) 
-				{
-					if (sliding_window[i] <= min_value) 
-					{
-						min_value = sliding_window[i];
-						min_index = i;
-					}
-				}
-				
-				indexes[min_index] += 1;
-				if (indexes[min_index] >= pos_vectors[min_index]->size()) 
-					return max_score; //maybe continue with others?
-			}
-		}
+    for (TermInfo* term : terms)
+    {
+        auto it = term->doc_pos_map.find(doc_id);
+        if (it == term->doc_pos_map.end())
+            return 0;//false; YOU HAVE AN IDEA HERE TO NOT RETURN (search will return for any phare then)
+        pos_vectors.push_back(&(it->second)); //get address of positions pos_vector
+    }			
+    
+    //use score function?
+    size_t num_terms = terms.size();
+    std::vector<size_t> indexes(num_terms, 0);
+    std::vector<long long int> sliding_window(num_terms); //should be of type PosType, but then i need to use static_case in std::abs
+    
+    size_t curr_score = 0;
+    size_t max_score = curr_score;
+    
+    while (1)
+    {
+        for (size_t i = 0; i < num_terms; ++i)
+            sliding_window[i] = (*pos_vectors[i])[indexes[i]];
+        
+        bool is_chain = true;
+        curr_score = 0;
+        for (size_t i = 1; i < num_terms; ++i)
+        {
+            if ( std::abs(sliding_window[i] - sliding_window[i-1]) > distance )
+            {
+                is_chain = false;
+                continue;//break;
+            }
+            ++curr_score;
+        }
+        
+        max_score = (curr_score > max_score) ? curr_score : max_score;
+        
+        if (is_chain)
+        {
+            return max_score; //i have an idea to add bonus score for each whole finded phrase. so return will be in the end
+        }
+        
+        size_t min_index = 0;
+        PosType min_value = sliding_window[0];
+        for (size_t i = 1; i < num_terms; ++i) 
+        {
+            if (sliding_window[i] <= min_value) 
+            {
+                min_value = sliding_window[i];
+                min_index = i;
+            }
+        }
+        
+        indexes[min_index] += 1;
+        if (indexes[min_index] >= pos_vectors[min_index]->size()) 
+            return max_score; //maybe continue with others?
+    }
+}
 	
 
 AuxiliaryIndex::AuxiliaryIndex(size_t s, const std::string& ma, const std::string& me)
@@ -399,7 +399,10 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
     }
 
     std::cout << "ai_max_score " << ai_max_score << std::endl;
+    std::cout << "ai_doc " << ai_best_doc_id << std::endl;
+
     std::cout << "disk_max_score " << disk_max_score << std::endl; 
+    std::cout << "disk_doc " << disk_best_doc_id << std::endl;
 
     return ai_max_score > disk_max_score ? ai_best_doc_id : disk_best_doc_id;
     
@@ -459,8 +462,9 @@ bool AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& target_term, Ter
 
     while ( ++ri != last_num )
         positions->push_back( static_cast<PosType>( std::stoul(ri->str()) ) );*/
-//}*/
+//}
 
+/*
 void AuxiliaryIndex::ReadFromDiskLogGeneral(const std::string& target_term, std::smatch& matched_line)
 {
     size_t i = GetSegmentIndex(target_term);
@@ -509,6 +513,7 @@ void AuxiliaryIndex::ReadFromDiskLogGeneral(const std::string& target_term, std:
             return;
     }
 }
+*/
 
 AuxiliaryIndex::DocIdType AuxiliaryIndex::Read(const TermType& term) //REFACTORED TODO
 {
