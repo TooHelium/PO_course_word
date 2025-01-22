@@ -321,6 +321,12 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
     
     std::unordered_set<size_t> acquired_segments;
 
+    TermInfo *ai_max_size_term;
+    size_t ai_max_size = 0;
+
+    TermInfo *disk_max_size_term;
+    size_t disk_max_size = 0;
+
     for (Phrase& phrase : phrases) //new versioin
     {
         for (const TermType& word : phrase.words)
@@ -334,7 +340,11 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
 
             auto it = table_[i].find(word);
             if (it != table_[i].end())
+            {
                 phrase.ai_terms.push_back( &(it->second) );
+                if ( it->second.doc_pos_map.size() >= ai_max_size )//
+                    ai_max_size_term = ( &(it->second) );//
+            }
             else
             {
                 phrase.ai_words.erase( std::find(phrase.ai_words.begin(), phrase.ai_words.end(), word) );
@@ -345,7 +355,11 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
 
             it = phrases_disk_table.find(word);
             if (it != phrases_disk_table.end())
+            {
                 phrase.disk_terms.push_back( &(it->second) );
+                if ( it->second.doc_pos_map.size() >= disk_max_size )//
+                    disk_max_size_term = ( &(it->second) );//
+            }
             else
             {
                 phrase.disk_words.erase( std::find(phrase.disk_words.begin(), phrase.disk_words.end(), word) );
@@ -363,7 +377,8 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
 
     if ( !phrases[0].ai_terms.empty() )
     {
-        for (const auto& pair : phrases[0].ai_terms[0]->doc_pos_map)
+        //for (const auto& pair : phrases[0].ai_terms[0]->doc_pos_map)
+        for (const auto& pair : ai_max_size_term->doc_pos_map)
         {	
             curr_doc_id = pair.first;
             
@@ -385,7 +400,8 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
     DocIdType disk_best_doc_id = 0;
     curr_score = 0;
     size_t disk_max_score = curr_score;
-    for (const auto& pair : phrases[0].disk_terms[0]->doc_pos_map)
+    //for (const auto& pair : phrases[0].disk_terms[0]->doc_pos_map)
+    for (const auto& pair : disk_max_size_term->doc_pos_map)
     {	
         curr_doc_id = pair.first;
         
@@ -409,6 +425,38 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
     return ai_max_score > disk_max_score ? ai_best_doc_id : disk_best_doc_id;
 }
 
+/*
+void AuxiliaryIndex::F(std::vector<Phrase>& phrases, Phrase& phrase_terms, size_t phrase_distance)
+{
+    DocIdType curr_doc_id;
+    DocIdType best_doc_id = 0;
+    size_t curr_score = 0;
+    size_t max_score = curr_score;
+
+    TermInfo *max_size_term = terms[0];
+
+    for (TermInfo* term : terms)
+    {
+        if (term->doc_pos_map.size() > max_size_term->doc_pos_map.size())
+            max_size_term = term;
+    }
+	
+    for (const auto& pair : max_size_term->doc_pos_map)
+    {
+        curr_doc_id = pair.first;
+        
+        curr_score = 0;
+        for (Phrase& phrase : phrases)
+            curr_score += phrase.FindIn(curr_doc_id, phrase_terms, phrase_distance);
+        
+        if (curr_score > max_score)
+        {
+            max_score = curr_score;
+            best_doc_id = curr_doc_id;
+        }
+    }
+}
+*/
 
 void AuxiliaryIndex::Write(const TermType& term, const DocIdType& doc_id, const PosType& term_position) //REFACTORED TODO
 {
@@ -682,7 +730,6 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
     indexes_paths_[i].UpdateMainIndexPath();
 }
 
-
 AuxiliaryIndex::DocFreqEntry AuxiliaryIndex::ReadFromDiskIndexLog(const std::string& target_term) //REFACTORED TODO
 {
     size_t i = GetSegmentIndex(target_term);
@@ -746,7 +793,6 @@ AuxiliaryIndex::DocFreqEntry AuxiliaryIndex::ReadFromDiskIndexLog(const std::str
 
     return DocFreqEntry();
 }
-
 
 void AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& target_term, TermsTable& phrases_disk_table) //REFACTORED TODO
 {
