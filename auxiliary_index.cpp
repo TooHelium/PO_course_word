@@ -87,7 +87,7 @@ std::string AuxiliaryIndex::TermInfo::MapEntryWithoutIdToString(const DocIdType&
 void AuxiliaryIndex::TermInfo::UpdateRanking(const DocFreqEntry& new_entry, size_t num_top)
 {
     if (desc_freq_ranking.size() < num_top 
-        || new_entry.freq > desc_freq_ranking.back().freq) //when we delete we need this algorithm too !!!!!!!
+        || new_entry.freq > desc_freq_ranking.back().freq)
     {
         auto it = std::find_if(desc_freq_ranking.begin(), desc_freq_ranking.end(), 
                                 [&new_entry](const DocFreqEntry& entry) 
@@ -105,16 +105,16 @@ void AuxiliaryIndex::TermInfo::UpdateRanking(const DocFreqEntry& new_entry, size
                                 return l.freq > r.freq;
                             });
                             
-        if (desc_freq_ranking.size() > num_top) //[10,164,18,71,67,]
+        if (desc_freq_ranking.size() > num_top)
             desc_freq_ranking.pop_back(); 
     }
 }
 
 
-AuxiliaryIndex::IndexPath::IndexPath(const std::string& ma, const std::string& me, std::unique_ptr<std::shared_mutex> mp)
+AuxiliaryIndex::IndexPath::IndexPath(const std::string& main_index_path, const std::string& merge_index_path, std::unique_ptr<std::shared_mutex> mp)
 {
-    main = ma;
-    merge = me;
+    main = main_index;
+    merge = merge_index;
     mtx_ptr = std::move(mp);
 }
 void AuxiliaryIndex::IndexPath::UpdateMainIndexPath()
@@ -128,35 +128,34 @@ std::string AuxiliaryIndex::IndexPath::GetMainIndexPath()
     return main;
 }
 std::string AuxiliaryIndex::IndexPath::GetMergeIndexPath()
-		{
-			std::shared_lock<std::shared_mutex> _(*mtx_ptr);
-			return merge;
-		}
+{
+    std::shared_lock<std::shared_mutex> _(*mtx_ptr);
+    return merge;
+}
 
 
 size_t AuxiliaryIndex::Phrase::FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms, size_t distance) //somehow we need to make them wait for each other
 {
     std::vector<std::vector<PosType>*> pos_vectors;
     
-    if (terms.size() == 1) //TODO MAYBE MERGE WITH NEXT CODE
+    if (terms.size() == 1) 
     {
         auto it = terms[0]->doc_pos_map.find(doc_id);
         if (it == terms[0]->doc_pos_map.end())
             return 0;
-        return 1;//return it->second.size();
+        return 1;
     }
 
     for (TermInfo* term : terms)
     {
         auto it = term->doc_pos_map.find(doc_id);
         if (it == term->doc_pos_map.end())
-            ++distance;//return 0;//false; YOU HAVE AN IDEA HERE TO NOT RETURN (search will return for any phare then)
+            ++distance;
         else
             pos_vectors.push_back(&(it->second)); //get address of positions pos_vector
     }			
     
-    //use score function?
-    size_t num_terms = pos_vectors.size();//terms.size();
+    size_t num_terms = pos_vectors.size();
     std::vector<size_t> indexes(num_terms, 0);
     std::vector<long long int> sliding_window(num_terms); //should be of type PosType, but then i need to use static_case in std::abs
     
@@ -175,7 +174,7 @@ size_t AuxiliaryIndex::Phrase::FindIn(DocIdType doc_id, std::vector<TermInfo*>& 
             if ( std::abs(sliding_window[i] - sliding_window[i-1]) > distance )
             {
                 is_chain = false;
-                continue;//break;
+                continue;
             }
             ++curr_score;
         }
@@ -183,9 +182,7 @@ size_t AuxiliaryIndex::Phrase::FindIn(DocIdType doc_id, std::vector<TermInfo*>& 
         max_score = (curr_score > max_score) ? curr_score : max_score;
         
         if (is_chain)
-        {
             return max_score; //i have an idea to add bonus score for each whole finded phrase. so return will be in the end
-        }
         
         size_t min_index = 0;
         PosType min_value = sliding_window[0];
@@ -200,7 +197,7 @@ size_t AuxiliaryIndex::Phrase::FindIn(DocIdType doc_id, std::vector<TermInfo*>& 
         
         indexes[min_index] += 1;
         if (indexes[min_index] >= pos_vectors[min_index]->size()) 
-            return max_score; //maybe continue with others?
+            return max_score;
     }
 }
 	
@@ -208,7 +205,7 @@ size_t AuxiliaryIndex::Phrase::FindIn(DocIdType doc_id, std::vector<TermInfo*>& 
 AuxiliaryIndex::AuxiliaryIndex(const std::string& main_index_path, const std::string& merge_index_path, 
 				               size_t num_of_segments, size_t max_segment_size, size_t num_top_doc_ids)
 {	
-    num_segments_ = num_of_segments ? num_of_segments : 1; //to make sure s is always > 0
+    num_segments_ = num_of_segments ? num_of_segments : 1; //default is 1 but it is unefficient
     
     table_.resize(num_segments_); 
     
@@ -217,7 +214,14 @@ AuxiliaryIndex::AuxiliaryIndex(const std::string& main_index_path, const std::st
         segments_.emplace_back(std::make_unique<std::shared_mutex>());
     
     for (size_t i = 0; i < num_segments_; ++i) 
+    {
         std::ofstream file(main_index_path + "i" + std::to_string(i) + ".txt");
+        if (!file)
+        {
+            std::lock_guard<std::mutex> _(print_mutex);
+            std::cerr << "Error creating initial main index file " << std::to_string(i) << '\n';
+        }
+    }
     
     for (size_t i = 0; i < num_segments_; ++i)
         indexes_paths_.emplace_back(main_index_path, merge_index_path, std::make_unique<std::shared_mutex>());
@@ -266,7 +270,7 @@ void AuxiliaryIndex::SplitIntoPhrases(std::string query, std::vector<Phrase>& ph
         if (std::regex_search(tmp, match, distance_regex))	
             phrase.words_distance = std::stoull( match[1].str() );
         else
-            phrase.words_distance = 1; //default distance. maybe  in separate class variable
+            phrase.words_distance = 1;
 
         phrase.ai_distance = phrase.words_distance;
         phrase.disk_distance = phrase.words_distance;
@@ -289,12 +293,6 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadOneWord(const std::string& term)
         top_ai = table_[i][term].desc_freq_ranking[0];
 
     DocFreqEntry top_disk = ReadFromDiskIndexLog(term);
-
-    std::cout << "(1)ai_max_score " << top_ai.freq << std::endl;
-    std::cout << "(1)ai_doc " << top_ai.doc_id << std::endl;
-
-    std::cout << "(1)disk_max_score " << top_disk.freq << std::endl; 
-    std::cout << "(1)disk_doc " << top_disk.doc_id << std::endl;
 
     return top_ai.freq > top_disk.freq ? top_ai.doc_id : top_disk.doc_id;
 } 
@@ -323,12 +321,12 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
     TermInfo *disk_max_size_term;
     size_t disk_max_size = 0;
 
-    for (Phrase& phrase : phrases) //new versioin
+    for (Phrase& phrase : phrases)
     {
         for (const TermType& word : phrase.words)
         {
             size_t i = GetSegmentIndex(word);
-            if ( !acquired_segments.count(i) ) //if not present
+            if ( !acquired_segments.count(i) ) // !!! if not present
             {
                 acquired_segments.insert(i);
                 locks.emplace_back(*segments_[i]);
@@ -365,7 +363,7 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
         }
     }
 
-    //AI best score
+    //ai best score
     DocIdType curr_doc_id;
     DocIdType ai_best_doc_id = 0;
     size_t curr_score = 0;
@@ -392,6 +390,7 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
     if ( phrases[0].disk_terms.empty() )
         return ai_best_doc_id;
 
+    //dist best score
     DocIdType disk_best_doc_id = 0;
     curr_score = 0;
     size_t disk_max_score = curr_score;
@@ -410,47 +409,9 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
         }
     }
 
-    std::cout << "ai_max_score " << ai_max_score << std::endl;
-    std::cout << "ai_doc " << ai_best_doc_id << std::endl;
-
-    std::cout << "disk_max_score " << disk_max_score << std::endl; 
-    std::cout << "disk_doc " << disk_best_doc_id << std::endl;
-
     return ai_max_score > disk_max_score ? ai_best_doc_id : disk_best_doc_id;
 }
 
-/*
-void AuxiliaryIndex::F(std::vector<Phrase>& phrases, Phrase& phrase_terms, size_t phrase_distance)
-{
-    DocIdType curr_doc_id;
-    DocIdType best_doc_id = 0;
-    size_t curr_score = 0;
-    size_t max_score = curr_score;
-
-    TermInfo *max_size_term = terms[0];
-
-    for (TermInfo* term : terms)
-    {
-        if (term->doc_pos_map.size() > max_size_term->doc_pos_map.size())
-            max_size_term = term;
-    }
-	
-    for (const auto& pair : max_size_term->doc_pos_map)
-    {
-        curr_doc_id = pair.first;
-        
-        curr_score = 0;
-        for (Phrase& phrase : phrases)
-            curr_score += phrase.FindIn(curr_doc_id, phrase_terms, phrase_distance);
-        
-        if (curr_score > max_score)
-        {
-            max_score = curr_score;
-            best_doc_id = curr_doc_id;
-        }
-    }
-}
-*/
 
 void AuxiliaryIndex::Write(const TermType& term, const DocIdType& doc_id, const PosType& term_position) //REFACTORED TODO
 {
@@ -475,7 +436,10 @@ size_t AuxiliaryIndex::SegmentSize(size_t i) //REFACTORED TODO
         std::shared_lock<std::shared_mutex> _(*segments_[i]);
         return table_[i].size();
     }
-        
+    
+    std::lock_guard<std::mutex> _(print_mutex);
+    std::cout << "Warning: there are only " << table_.size() << " segments\n";
+
     return 0;
 }
 
@@ -566,12 +530,14 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
     
     if (!ma_file || !me_file)
     {
+        std::lock_guard<std::mutex> _(print_mutex);
+
         std::cerr << "ERROR merging files:\n";
 
         if (!ma_file) std::cerr << "ma: " << index_filename << '\n';
         if (!ma_file) std::cerr << "me: " << merge_filename << '\n';
 
-        table_[i].clear(); //DOTO NOT SURE ABOUT THIS
+        table_[i].clear();
 
         return;
     }
@@ -582,13 +548,13 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
     for (const auto& pair : table_[i])
         terms.push_back(pair.first);
     
-    std::sort(terms.begin(), terms.end()); //terms are sorted
+    std::sort(terms.begin(), terms.end()); //terms are sorted now
     auto terms_it = terms.begin();
     auto terms_end = terms.end();
     
     std::string line;
-    std::regex term_regex("^(.+):"); //"\\w+(['-]\\w+)*" maybe to use this?
-    std::regex term_info_regex("\\d+=(\\d+,[^;]+);"); //be cautious, my friend
+    std::regex term_regex("^(.+):");
+    std::regex term_info_regex("\\d+=(\\d+,[^;]+);");
     std::regex doc_freq_regex("(\\d+)=(\\d+)");
     std::smatch match;
     
@@ -734,6 +700,7 @@ AuxiliaryIndex::DocFreqEntry AuxiliaryIndex::ReadFromDiskIndexLog(const std::str
 
     if (!file)
     {
+        std::lock_guard<std::mutex> _(print_mutex);
         std::cerr << "Error opening file for reading: " << index_filename << '\n';
         return DocFreqEntry();
     }
@@ -801,6 +768,7 @@ void AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& target_term, Ter
 
     if (!file)
     {
+        std::lock_guard<std::mutex> _(print_mutex);
         std::cerr << "Error opening file for reading: " << index_filename << '\n';
         return;
     }

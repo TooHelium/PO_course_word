@@ -96,10 +96,10 @@ private:
 
 private:
     size_t GetSegmentIndex(const TermType& term);
-    void ReadTermInfoFromDiskLog(const TermType& target_term, TermsTable& phrases_disk_table); //TODO
-    DocFreqEntry ReadFromDiskIndexLog(const TermType& target_term); //TODO
+    void ReadTermInfoFromDiskLog(const TermType& target_term, TermsTable& phrases_disk_table);
+    DocFreqEntry ReadFromDiskIndexLog(const TermType& target_term);
     void SplitIntoPhrases(std::string query, std::vector<Phrase>& phrases);
-	void MergeAiWithDisk(size_t i); //TODO
+	void MergeAiWithDisk(size_t i);
 	DocIdType ReadOneWord(const TermType& term);
 
 public:
@@ -108,7 +108,7 @@ public:
 
 	void Write(const TermType& term, const DocIdType& doc_id, const PosType& term_position);
     DocIdType ReadPhrase(const std::string& query);
-	size_t SegmentSize(size_t i); //TODO syncronization
+	size_t SegmentSize(size_t i);
 };
 
 #endif //AUXILIARY_INDEX_H

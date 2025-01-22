@@ -14,8 +14,8 @@
 
 #include "BS_thread_pool.hpp"
 
-#include "main.cpp"
 #include "sheduler.cpp"
+#include "auxiliary_index.cpp"
 
 #define PORT 8080
 #define MY_ADDR "192.168.0.100"
@@ -46,6 +46,9 @@ std::string content_root;
 
 std::mutex print_mutex;
 
+std::regex path_root("^GET / HTTP/1.1");
+std::regex query_regex("^GET /search\\?query=([^ ]+) HTTP/1.1");
+
 using DecodeRule = std::pair<std::regex, std::string>;
 
 std::vector<DecodeRule> url_decoding_map = {
@@ -58,27 +61,31 @@ std::vector<DecodeRule> url_decoding_map = {
      {std::regex("%2E"), "."} 
 };
 
-void DecodeUrl(std::string& enc_url)
+inline void DecodeUrl(std::string& enc_url)
 {
     for (const DecodeRule& pair : url_decoding_map)
         enc_url = std::regex_replace(enc_url, pair.first, pair.second);
 }
 
-void HandleRequest(int& client_socket, AuxiliaryIndex& ai_many, Sheduler& sheduler) 
+void HandleRequest(int& client_socket, AuxiliaryIndex& ai, Sheduler& sheduler) 
 {
     const size_t kMaxBufferSize = 512;
     char request[kMaxBufferSize];
 
     int recved = recv(client_socket, request, sizeof(request) - 1, 0);
     
-    if (recved < 1)
+    if (recved < 0)
     {
-        close(client_socket); //std::cout << "ERROR receiving request from client" << std::endl;
+        std::lock_guard<std::mutex> _(print_mutex);
+        std::cerr << "Error receiving request from client" << std::endl;
+        close(client_socket);
         return;
     }
-    else if (0 == recved)
+    else
     {
-        close(client_socket); //std::cout << "ERROR client closed connection" << std::endl;
+        std::lock_guard<std::mutex> _(print_mutex);
+        std::cerr << "Error client closed connection" << std::endl;
+        close(client_socket);
         return;
     }
 
@@ -86,8 +93,6 @@ void HandleRequest(int& client_socket, AuxiliaryIndex& ai_many, Sheduler& shedul
     std::string request_str(request); 
 
     std::string http_response;
-    std::regex path_root("^GET / HTTP/1.1");
-    std::regex query_regex("^GET /search\\?query=([^ ]+) HTTP/1.1");
     std::smatch match;
 
     if (std::regex_search(request_str, path_root))
@@ -97,7 +102,7 @@ void HandleRequest(int& client_socket, AuxiliaryIndex& ai_many, Sheduler& shedul
         std::string query = match[1].str();
         DecodeUrl(query);
 
-        std::string path = sheduler.GetPathByDocId( ai_many.ReadPhrase(query) );
+        std::string path = sheduler.GetPathByDocId( ai.ReadPhrase(query) );
 
         if (path == "none")
             http_response = STATUS_404;
@@ -141,70 +146,9 @@ bool CreateDirectory(const std::string& path)
     
     return true;
 }
-/*
-void ReadArgsFromUser(AuxiliaryIndex& ai, Sheduler& s)
-{
-    std::cout << "------Index creation------\n";
 
-    std::string main_index_path;
-    std::string merge_index_path;
-    size_t num_of_segments;
-    size_t max_segment_size;
-    size_t num_top_doc_ids;
-
-repeat_main:
-    std::cout << "Enter path to the main index: "; 
-    std::getline(std::cin, main_index_path);
-    if ( !CreateDirectory(main_index_path) )
-        goto repeat_main;
-
-repeat_merge:
-    std::cout << "Enter path to the merge index: "; 
-    std::getline(std::cin, merge_index_path); 
-    if ( !CreateDirectory(merge_index_path) )
-        goto repeat_merge;
-
-    std::cout << "Enter numbers of index's segments: "; std::cin >> num_of_segments;
-    std::cout << "Enter max segment's size: "; std::cin >> max_segment_size;
-    std::cout << "Enter number of monitored top documents: "; std::cin >> num_top_doc_ids;
-
-    AuxiliaryIndex ai(main_index_path, merge_index_path, num_of_segments, max_segment_size, num_top_doc_ids);
-
-    //std::thread t_ai(run, std::ref(ai));
-
-
-    std::cout << "------Thread pool creation------\n";
-
-    size_t num_threads;
-    std::cout << "Enter number of threads in pool: "; std::cin >> num_threads;
-
-    BS::priority_thread_pool pool(num_threads); 
-
-
-    std::cout << "------Sheduler creation------\n";
-
-    std::string data_path;
-    std::size_t seconds_to_sleep;
-
-repeat_data:
-    std::cout << "Enter path to data: "; 
-    std::cin.ignore();
-    std::getline(std::cin, data_path);
-    if ( !CreateDirectory(data_path) )
-        goto repeat_data;
-
-    std::cout << "Enter time period (in seconds) to inspect new directories: "; std::cin >> seconds_to_sleep;
-
-    Sheduler s(data_path, &ai, &pool, seconds_to_sleep);
-
-    std::thread t_s(&Sheduler::MonitorData, &s);
-    t_s.detach();
-}
-*/
 int main() 
 {
-    
-
     std::cout << "------Index creation------\n";
 
     std::string main_index_path;
@@ -231,16 +175,12 @@ repeat_merge:
 
     AuxiliaryIndex ai(main_index_path, merge_index_path, num_of_segments, max_segment_size, num_top_doc_ids);
 
-    //std::thread t_ai(run, std::ref(ai));
-
-
     std::cout << "------Thread pool creation------\n";
 
     size_t num_threads;
     std::cout << "Enter number of threads in pool: "; std::cin >> num_threads;
 
     BS::priority_thread_pool pool(num_threads); 
-
 
     std::cout << "------Sheduler creation------\n";
 
@@ -256,10 +196,9 @@ repeat_data:
 
     std::cout << "Enter time period (in seconds) to inspect new directories: "; std::cin >> seconds_to_sleep;
 
-    Sheduler s(data_path, &ai, &pool, seconds_to_sleep);
+    Sheduler sheduler(data_path, &ai, &pool, seconds_to_sleep);
 
-    std::thread t_s(&Sheduler::MonitorData, &s);
-    //t_s.detach();
+    std::thread t_s(&Sheduler::MonitorData, &sheduler);
 
     std::ifstream file(HTML_ROOT);
     if (file) 
@@ -269,6 +208,7 @@ repeat_data:
     }
     else
     {
+        std::lock_guard<std::mutex> _(print_mutex);
         std::cerr << "Cannot load HTML content (root)\n";
         return 1;
     }
@@ -278,6 +218,7 @@ repeat_data:
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (-1 == server_socket) 
     {
+        std::lock_guard<std::mutex> _(print_mutex);
         std::cerr << "Server socket creation failed\n";
         return 1;
     }
@@ -290,6 +231,7 @@ repeat_data:
 
     if (-1 == bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr))) 
     {
+        std::lock_guard<std::mutex> _(print_mutex);
         std::cerr << "Bind failed\n";
         close(server_socket);
         return 1;
@@ -297,22 +239,30 @@ repeat_data:
 
     if (-1 == listen(server_socket, 120)) 
     {
+        std::lock_guard<std::mutex> _(print_mutex);
         std::cerr << "Listen failed\n";
         close(server_socket);
         return 1;
     }
     
-    std::cout << "Server (" << LOCAL_HOST << ") listening on port " << PORT << "...\n";
+    {
+        std::lock_guard<std::mutex> _(print_mutex);
+        std::cout << "Server (" << LOCAL_HOST << ") listening on port " << PORT << "...\n";
+    }
 
     while (true) 
     {
         int client_socket = accept(server_socket, NULL, NULL);
         if (-1 == client_socket) 
-            continue; //std::cerr << "Accept failed\n";
+        {
+            std::lock_guard<std::mutex> _(print_mutex);
+            std::cerr << "Accept failed\n";
+            continue;
+        }
 
 
-        (void) pool.submit_task([&client_socket, &ai, &s] {
-            HandleRequest(client_socket, std::ref(ai), std::ref(s));
+        (void) pool.submit_task([&client_socket, &ai, &sheduler] {
+            HandleRequest(client_socket, std::ref(ai), std::ref(sheduler));
         }, BS::pr::high);
     }
 
