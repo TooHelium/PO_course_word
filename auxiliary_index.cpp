@@ -205,9 +205,10 @@ size_t AuxiliaryIndex::Phrase::FindIn(DocIdType doc_id, std::vector<TermInfo*>& 
 }
 	
 
-AuxiliaryIndex::AuxiliaryIndex(size_t s, const std::string& ma, const std::string& me)
+AuxiliaryIndex::AuxiliaryIndex(const std::string& main_index_path, const std::string& merge_index_path, 
+				               size_t num_of_segments, size_t max_segment_size, size_t num_top_doc_ids)
 {	
-    num_segments_ = s ? s : 1; //to make sure s is always > 0
+    num_segments_ = num_of_segments ? num_of_segments : 1; //to make sure s is always > 0
     
     table_.resize(num_segments_); 
     
@@ -216,18 +217,13 @@ AuxiliaryIndex::AuxiliaryIndex(size_t s, const std::string& ma, const std::strin
         segments_.emplace_back(std::make_unique<std::shared_mutex>());
     
     for (size_t i = 0; i < num_segments_; ++i) 
-    {
-        std::ofstream file(ma + "i" + std::to_string(i) + ".txt");
-        if (!file.is_open())
-            std::cout << "Error creating initial index file " << i << std::endl;
-        file.close();
-    }		
+        std::ofstream file(main_index_path + "i" + std::to_string(i) + ".txt");
     
     for (size_t i = 0; i < num_segments_; ++i)
-        indexes_paths_.emplace_back(ma, me, std::make_unique<std::shared_mutex>());
+        indexes_paths_.emplace_back(main_index_path, merge_index_path, std::make_unique<std::shared_mutex>());
 
-    num_top_doc_ids_ = 5;
-    max_segment_size_ = 100;
+    max_segment_size_ = max_segment_size ? max_segment_size : 1000; //1000 is default value
+    num_top_doc_ids_ = num_top_doc_ids ? num_top_doc_ids : 1; //at least one top doc id is always needed
 }
 
 inline size_t AuxiliaryIndex::GetSegmentIndex(const TermType& term) 
@@ -342,8 +338,8 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
             if (it != table_[i].end())
             {
                 phrase.ai_terms.push_back( &(it->second) );
-                if ( it->second.doc_pos_map.size() >= ai_max_size )//
-                    ai_max_size_term = ( &(it->second) );//
+                if ( it->second.doc_pos_map.size() >= ai_max_size )
+                    ai_max_size_term = ( &(it->second) );
             }
             else
             {
@@ -357,8 +353,8 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
             if (it != phrases_disk_table.end())
             {
                 phrase.disk_terms.push_back( &(it->second) );
-                if ( it->second.doc_pos_map.size() >= disk_max_size )//
-                    disk_max_size_term = ( &(it->second) );//
+                if ( it->second.doc_pos_map.size() >= disk_max_size )
+                    disk_max_size_term = ( &(it->second) );
             }
             else
             {
@@ -377,7 +373,6 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
 
     if ( !phrases[0].ai_terms.empty() )
     {
-        //for (const auto& pair : phrases[0].ai_terms[0]->doc_pos_map)
         for (const auto& pair : ai_max_size_term->doc_pos_map)
         {	
             curr_doc_id = pair.first;
@@ -400,7 +395,6 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
     DocIdType disk_best_doc_id = 0;
     curr_score = 0;
     size_t disk_max_score = curr_score;
-    //for (const auto& pair : phrases[0].disk_terms[0]->doc_pos_map)
     for (const auto& pair : disk_max_size_term->doc_pos_map)
     {	
         curr_doc_id = pair.first;

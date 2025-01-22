@@ -102,11 +102,9 @@ private:
 	void MergeAiWithDisk(size_t i); //TODO
 	DocIdType ReadOneWord(const TermType& term);
 
-
-	void F(std::vector<TermInfo*>& terms);
-
 public:
-	AuxiliaryIndex(size_t s, const std::string& ma, const std::string& me);
+	AuxiliaryIndex(const std::string& main_index_path, const std::string& merge_index_path, 
+				   size_t num_of_segments, size_t max_segment_size, size_t num_top_doc_ids);
 
 	void Write(const TermType& term, const DocIdType& doc_id, const PosType& term_position);
     DocIdType ReadPhrase(const std::string& query);

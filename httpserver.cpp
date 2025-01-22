@@ -21,7 +21,7 @@
 #define MY_ADDR "192.168.0.100"
 #define LOCAL_HOST "127.0.0.1"
 
-#define HTML_ROOT "index.html"
+#define HTML_ROOT "./index.html"
 
 #define STATUS_404 ("HTTP/1.1 404 Not Found\r\n" \
                     "Content-Type: text/html; charset=UTF-8\r\n" \
@@ -119,37 +119,150 @@ void HandleRequest(int& client_socket, AuxiliaryIndex& ai_many, Sheduler& shedul
 
     send(client_socket, http_response.c_str(), http_response.size(), 0); 
 
-    //sleep(1);
     close(client_socket);
 }
 
+bool CreateDirectory(const std::string& path)
+{
+    std::filesystem::path dir(path);
 
+    if ( !std::filesystem::exists(dir) )
+    {
+        if (std::filesystem::create_directories(dir))
+            std::cout << "Directory created: " << path << '\n';
+        else
+        {
+            std::cerr << "Fail to create directory: " << path << '\n';
+            return false;
+        }
+    }
+    else
+        std::cout << "Warning: directory already exists: " << path << '\n';
+    
+    return true;
+}
+/*
+void ReadArgsFromUser(AuxiliaryIndex& ai, Sheduler& s)
+{
+    std::cout << "------Index creation------\n";
+
+    std::string main_index_path;
+    std::string merge_index_path;
+    size_t num_of_segments;
+    size_t max_segment_size;
+    size_t num_top_doc_ids;
+
+repeat_main:
+    std::cout << "Enter path to the main index: "; 
+    std::getline(std::cin, main_index_path);
+    if ( !CreateDirectory(main_index_path) )
+        goto repeat_main;
+
+repeat_merge:
+    std::cout << "Enter path to the merge index: "; 
+    std::getline(std::cin, merge_index_path); 
+    if ( !CreateDirectory(merge_index_path) )
+        goto repeat_merge;
+
+    std::cout << "Enter numbers of index's segments: "; std::cin >> num_of_segments;
+    std::cout << "Enter max segment's size: "; std::cin >> max_segment_size;
+    std::cout << "Enter number of monitored top documents: "; std::cin >> num_top_doc_ids;
+
+    AuxiliaryIndex ai(main_index_path, merge_index_path, num_of_segments, max_segment_size, num_top_doc_ids);
+
+    //std::thread t_ai(run, std::ref(ai));
+
+
+    std::cout << "------Thread pool creation------\n";
+
+    size_t num_threads;
+    std::cout << "Enter number of threads in pool: "; std::cin >> num_threads;
+
+    BS::priority_thread_pool pool(num_threads); 
+
+
+    std::cout << "------Sheduler creation------\n";
+
+    std::string data_path;
+    std::size_t seconds_to_sleep;
+
+repeat_data:
+    std::cout << "Enter path to data: "; 
+    std::cin.ignore();
+    std::getline(std::cin, data_path);
+    if ( !CreateDirectory(data_path) )
+        goto repeat_data;
+
+    std::cout << "Enter time period (in seconds) to inspect new directories: "; std::cin >> seconds_to_sleep;
+
+    Sheduler s(data_path, &ai, &pool, seconds_to_sleep);
+
+    std::thread t_s(&Sheduler::MonitorData, &s);
+    t_s.detach();
+}
+*/
 int main() 
 {
-    size_t num_of_segments = 10;          
-	std::string ma = "/home/dima/Desktop/БІС/test IR/Новая папка (copy)/main index/";
-	std::string me = "/home/dima/Desktop/БІС/test IR/Новая папка (copy)/merged index/";
-	AuxiliaryIndex ai_many(num_of_segments, ma, me);
+    
 
-    std::thread t_ai(run, std::ref(ai_many));
-    t_ai.detach();
-    ////////////////////////////
+    std::cout << "------Index creation------\n";
 
-    std::cout << "Creating thread pool...\n"; 
-    BS::thread_pool<4> pool(4);
+    std::string main_index_path;
+    std::string merge_index_path;
+    size_t num_of_segments;
+    size_t max_segment_size;
+    size_t num_top_doc_ids;
 
-    //////////////////////////
+repeat_main:
+    std::cout << "Enter path to the main index: "; 
+    std::getline(std::cin, main_index_path);
+    if ( !CreateDirectory(main_index_path) )
+        goto repeat_main;
 
-    std::cout << "Creating Sheduler..." << std::endl;
-    Sheduler s("/home/dima/Desktop/БІС/test IR/Новая папка (copy)/data/", &ai_many, &pool, 5);
-	std::thread t_s(&Sheduler::MonitorData, &s);
-    t_s.detach();
+repeat_merge:
+    std::cout << "Enter path to the merge index: "; 
+    std::getline(std::cin, merge_index_path); 
+    if ( !CreateDirectory(merge_index_path) )
+        goto repeat_merge;
 
-    ///////////////////
+    std::cout << "Enter numbers of index's segments: "; std::cin >> num_of_segments;
+    std::cout << "Enter max segment's size: "; std::cin >> max_segment_size;
+    std::cout << "Enter number of monitored top documents: "; std::cin >> num_top_doc_ids;
+
+    AuxiliaryIndex ai(main_index_path, merge_index_path, num_of_segments, max_segment_size, num_top_doc_ids);
+
+    //std::thread t_ai(run, std::ref(ai));
 
 
-    std::ifstream file(HTML_ROOT, std::ios::in);
-    if (file.is_open()) 
+    std::cout << "------Thread pool creation------\n";
+
+    size_t num_threads;
+    std::cout << "Enter number of threads in pool: "; std::cin >> num_threads;
+
+    BS::priority_thread_pool pool(num_threads); 
+
+
+    std::cout << "------Sheduler creation------\n";
+
+    std::string data_path;
+    std::size_t seconds_to_sleep;
+
+repeat_data:
+    std::cout << "Enter path to data: "; 
+    std::cin.ignore();
+    std::getline(std::cin, data_path);
+    if ( !CreateDirectory(data_path) )
+        goto repeat_data;
+
+    std::cout << "Enter time period (in seconds) to inspect new directories: "; std::cin >> seconds_to_sleep;
+
+    Sheduler s(data_path, &ai, &pool, seconds_to_sleep);
+
+    std::thread t_s(&Sheduler::MonitorData, &s);
+    //t_s.detach();
+
+    std::ifstream file(HTML_ROOT);
+    if (file) 
     {
         content_root = std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         file.close();
@@ -198,8 +311,8 @@ int main()
             continue; //std::cerr << "Accept failed\n";
 
 
-        (void) pool.submit_task([&client_socket, &ai_many, &s] {
-            HandleRequest(client_socket, std::ref(ai_many), std::ref(s));
+        (void) pool.submit_task([&client_socket, &ai, &s] {
+            HandleRequest(client_socket, std::ref(ai), std::ref(s));
         }, BS::pr::high);
     }
 

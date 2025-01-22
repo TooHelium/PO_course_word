@@ -9,13 +9,10 @@
 #include <filesystem>
 #include <fstream>
 
-Sheduler::Sheduler(const std::string dp, AuxiliaryIndex* ai_many, BS::thread_pool<4>* thread_pool, size_t sleep_duration)
+Sheduler::Sheduler(const std::string data_path, AuxiliaryIndex* aux_idx, BS::priority_thread_pool* thread_pool, size_t sleep_duration)
 {
-    if ( !(std::filesystem::exists(dp) && std::filesystem::is_directory(dp)) )
-        throw std::invalid_argument("Data path does not exist or is not a directory");
-    
-    data_path_ = dp;
-    ai = ai_many;
+    data_path_ = data_path;
+    ai = aux_idx;
     pool = thread_pool;
     duration_ = std::chrono::seconds( sleep_duration );
     mtx_ptr = std::make_unique<std::shared_mutex>();
@@ -42,7 +39,7 @@ void Sheduler::MonitorData()
 
                 if ( !monitored_dirs_.count(curr_dir) )
                 {
-                    //std::cout << "New directory " << curr_dir.string() << std::endl;
+                    std::cout << "New directory " << curr_dir.string() << std::endl;
 
                     monitored_dirs_.insert(curr_dir);
 
