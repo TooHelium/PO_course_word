@@ -68,24 +68,24 @@ private:
         size_t disk_distance;
 		
     public:
-		size_t FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms, size_t distance); 
+		size_t FindIn(DocIdType doc_id, std::vector<TermInfo*>& terms, size_t distance); //
 	};
 
 private:
-    size_t GetSegmentIndex(const TermType& term);
-    void ReadTermInfoFromDiskLog(const TermType& target_term, TermsTable& phrases_disk_table);
-    DocFreqEntry ReadFromDiskIndexLog(const TermType& target_term);
-    void SplitIntoPhrases(std::string query, std::vector<Phrase>& phrases);
-	void MergeAiWithDisk(size_t i);
-	DocIdType ReadOneWord(const TermType& term);
+    inline size_t GetSegmentIndex(const TermType& term);//
+    void ReadTermInfoFromDisk(const TermType& target_term, TermsTable& phrases_disk_table);//
+    DocFreqEntry ReadDocFreqEntryFromDisk(const TermType& target_term);//
+    void SplitIntoPhrases(std::string query, std::vector<Phrase>& phrases); //
+	void MergeAiWithDisk(size_t i);//
+	DocIdType ReadOneWord(const TermType& term);//
 
 public:
 	AuxiliaryIndex(const std::string& main_index_path, const std::string& merge_index_path, 
-				   size_t num_of_segments, size_t max_segment_size, size_t num_top_doc_ids);
+				   size_t num_of_segments, size_t max_segment_size, size_t num_top_doc_ids);//
 
-	void Write(const TermType& term, const DocIdType& doc_id, const PosType& term_position);
-    DocIdType ReadPhrase(const std::string& query);
-	size_t SegmentSize(size_t i);
+	void Write(const TermType& term, const DocIdType& doc_id, const PosType& term_position);//
+    DocIdType ReadPhrase(const std::string& query);//
+	size_t SegmentSize(size_t i);//
 };
 
 #endif //AUXILIARY_INDEX_H

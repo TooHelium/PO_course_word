@@ -10,25 +10,27 @@
 
 extern std::mutex print_mutex;
 
-Sheduler::Sheduler(const std::string data_path, AuxiliaryIndex* aux_idx, BS::priority_thread_pool* thread_pool, size_t sleep_duration)
+Scheduler::Scheduler(const std::string data_path, AuxiliaryIndex* aux_idx, BS::priority_thread_pool* thread_pool, size_t sleep_duration)
 {
     data_path_ = data_path;
-    ai = aux_idx;
-    pool = thread_pool;
+    ai_ptr_ = aux_idx;
+    pool_ptr_ = thread_pool;
     duration_ = std::chrono::seconds( sleep_duration );
-    mtx_ptr = std::make_unique<std::shared_mutex>();
+    mtx_ptr_ = std::make_unique<std::shared_mutex>();
     
-    id_range_regex = std::regex("(\\d+)-(\\d+)");
-    word_regex = std::regex("\\w+(['-]\\w+)*");
+    id_range_regex_ = std::regex("(\\d+)-(\\d+)");
+    word_regex_ = std::regex("\\w+(['-]\\w+)*");
 }
 
-void Sheduler::MonitorData()
+void Scheduler::MonitorData()
 {
     std::filesystem::path curr_dir;
 
     while (1)
     {
         std::this_thread::sleep_for(duration_);
+        for (int i = 0; i < 10; ++i)
+            std::cout << ai_ptr_->SegmentSize(i) << std::endl;
         
         for (const auto& entry : std::filesystem::directory_iterator(data_path_))
         {
@@ -36,7 +38,7 @@ void Sheduler::MonitorData()
             {		
                 curr_dir = entry.path();
 
-                std::unique_lock<std::shared_mutex> _(*mtx_ptr);
+                std::unique_lock<std::shared_mutex> _(*mtx_ptr_);
 
                 if ( !monitored_dirs_.count(curr_dir) )
                 {
@@ -53,7 +55,7 @@ void Sheduler::MonitorData()
     }
 }
 
-std::string Sheduler::GetPathByDocId(const uint32_t id)
+std::string Scheduler::GetPathByDocId(const uint32_t id)
 {
     if (id == 0)
         return "none";
@@ -61,12 +63,12 @@ std::string Sheduler::GetPathByDocId(const uint32_t id)
     std::smatch match;
     std::string tmp;
  
-    std::shared_lock<std::shared_mutex> _(*mtx_ptr);
+    std::shared_lock<std::shared_mutex> _(*mtx_ptr_);
 
     for (const std::filesystem::path& dir_path : monitored_dirs_)
     {
         tmp = dir_path.stem().string();
-        if (std::regex_search(tmp, match, id_range_regex))
+        if (std::regex_search(tmp, match, id_range_regex_))
         {
             uint32_t min_id = static_cast<uint32_t>( std::stoul(match[1].str()) );
             uint32_t max_id = static_cast<uint32_t>( std::stoul(match[2].str()) );
@@ -79,7 +81,7 @@ std::string Sheduler::GetPathByDocId(const uint32_t id)
     return "none";
 }
 
-bool Sheduler::DirIsReady(const std::filesystem::path& path)
+bool Scheduler::DirIsReady(const std::filesystem::path& path)
 {
     std::string path_stem = path.stem().string();
     
@@ -89,20 +91,20 @@ bool Sheduler::DirIsReady(const std::filesystem::path& path)
     return false;
 }
 
-void Sheduler::InspectDir(const std::string directory_path)
+void Scheduler::InspectDir(const std::string directory_path)
 {
     for (const auto& entry : std::filesystem::directory_iterator(directory_path))
     {
         if (entry.path().extension() == ".txt")
         {
-            (void) pool->submit_task( [this, entry] {
-                SplitFileInWords(entry.path());
+            (void) pool_ptr_->submit_task( [this, entry] {
+                WordParser(entry.path());
             }, BS::pr::normal);
         }
     }
 }
 
-void Sheduler::SplitFileInWords(const std::filesystem::path& file_path)
+void Scheduler::WordParser(const std::filesystem::path& file_path)
 {
 	std::ifstream file(file_path.string());
 
@@ -122,7 +124,7 @@ void Sheduler::SplitFileInWords(const std::filesystem::path& file_path)
 
 	while ( std::getline(file, line) )
 	{
-		auto first_word = std::sregex_iterator(line.begin(), line.end(), word_regex);
+		auto first_word = std::sregex_iterator(line.begin(), line.end(), word_regex_);
 		auto last_word = std::sregex_iterator();
 		
 		for (std::sregex_iterator it = first_word; it != last_word; ++it)
@@ -133,7 +135,7 @@ void Sheduler::SplitFileInWords(const std::filesystem::path& file_path)
 			std::transform(match_str.begin(), match_str.end(), match_str.begin(), 
 						   [](unsigned char c) { return std::tolower(c); }); 
 			
-			ai->Write(match_str, doc_id, word_position++);
+			ai_ptr_->Write(match_str, doc_id, word_position++);
 		}
 	}
 }

@@ -69,7 +69,7 @@ inline void DecodeUrl(std::string& enc_url)
         enc_url = std::regex_replace(enc_url, pair.first, pair.second);
 }
 
-void HandleRequest(int& client_socket, AuxiliaryIndex& ai, Sheduler& sheduler) 
+void HandleRequest(int& client_socket, AuxiliaryIndex& ai, Scheduler& sheduler) 
 {
     const size_t kMaxBufferSize = 512;
     char request[kMaxBufferSize];
@@ -151,7 +151,7 @@ bool CreateDirectory(const std::string& path)
 
 int main() 
 {
-    std::cout << "------Index creation------\n";
+    std::cout << "\n------Index creation------\n";
 
     std::string main_index_path;
     std::string merge_index_path;
@@ -177,14 +177,14 @@ repeat_merge:
 
     AuxiliaryIndex ai(main_index_path, merge_index_path, num_of_segments, max_segment_size, num_top_doc_ids);
 
-    std::cout << "------Thread pool creation------\n";
+    std::cout << "\n------Thread pool creation------\n";
 
     size_t num_threads;
     std::cout << "Enter number of threads in pool: "; std::cin >> num_threads;
 
     BS::priority_thread_pool pool(num_threads); 
 
-    std::cout << "------Sheduler creation------\n";
+    std::cout << "\n------Sheduler creation------\n";
 
     std::string data_path;
     std::size_t seconds_to_sleep;
@@ -198,9 +198,9 @@ repeat_data:
 
     std::cout << "Enter time period (in seconds) to inspect new directories: "; std::cin >> seconds_to_sleep;
 
-    Sheduler sheduler(data_path, &ai, &pool, seconds_to_sleep);
+    Scheduler sheduler(data_path, &ai, &pool, seconds_to_sleep);
 
-    std::thread t_s(&Sheduler::MonitorData, &sheduler);
+    std::thread t_s(&Scheduler::MonitorData, &sheduler);
 
     //opening root page file
     std::ifstream file(HTML_ROOT);
@@ -249,7 +249,7 @@ repeat_data:
     
     {
         std::lock_guard<std::mutex> _(print_mutex);
-        std::cout << "Server (" << LOCAL_HOST << ") listening on port " << PORT << "...\n";
+        std::cout << "\nServer (" << LOCAL_HOST << ") listening on port " << PORT << "...\n";
     }
 
     while (true) 

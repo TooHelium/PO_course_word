@@ -282,7 +282,7 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadOneWord(const std::string& term)
     if ( it != table_[i].end() )
         top_ai = table_[i][term].desc_freq_ranking[0];
 
-    DocFreqEntry top_disk = ReadFromDiskIndexLog(term);
+    DocFreqEntry top_disk = ReadDocFreqEntryFromDisk(term);
 
     return top_ai.freq > top_disk.freq ? top_ai.doc_id : top_disk.doc_id;
 } 
@@ -335,7 +335,7 @@ AuxiliaryIndex::DocIdType AuxiliaryIndex::ReadPhrase(const std::string& query)
                 phrase.ai_distance += 1;
             }
 
-            ReadTermInfoFromDiskLog(word, phrases_disk_table);
+            ReadTermInfoFromDisk(word, phrases_disk_table);
 
             it = phrases_disk_table.find(word);
             if (it != phrases_disk_table.end())
@@ -415,7 +415,11 @@ void AuxiliaryIndex::Write(const TermType& term, const DocIdType& doc_id, const 
     table_[i][term].UpdateRanking( DocFreqEntry{doc_id, positions.size()}, num_top_doc_ids_ ); //maybe make it static for CLASS, eh?
     
     if ( table_[i].size() > max_segment_size_ )
+    {
+        //std::cout << "Before merging " << std::to_string(i) << '\n';
         MergeAiWithDisk(i);
+        //std::cout << "After merging " << std::to_string(i) << '\n';
+    }
 }
 
 
@@ -512,6 +516,12 @@ size_t MergeTermPosInfos(std::string& s1, std::string& s2)
 
 void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
 {
+    if (i >= table_.size() || i >= indexes_paths_.size())
+    {
+        std::cerr << "Index out of bounds: " << i << std::endl;
+        return;
+    }
+
     std::string index_filename = indexes_paths_[i].GetMainIndexPath() + "i" + std::to_string(i) + ".txt"; 
     std::string merge_filename = indexes_paths_[i].GetMergeIndexPath() + "i" + std::to_string(i) + ".txt"; 
     
@@ -550,22 +560,28 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
     
     while (std::getline(ma_file, line))
     {
+
         if (terms_it == terms_end)
         {
             me_file << line << std::endl;
             continue;
         }
-        
-        if (std::regex_search(line, match, term_regex))
+
+        size_t POS = line.find(":");//new
+        if (POS != std::string::npos)
         {
-            while (terms_it != terms_end && *terms_it < match[1].str())
+            std::string TERM = line.substr(0,POS); 
+        //if (std::regex_search(line, match, term_regex)) match[1].str()
+        //{
+            //std::cout << "ccccccccc\n";//new
+            while (terms_it != terms_end && *terms_it < TERM)
             {
                 me_file << *terms_it << ":" 
                         << table_[i][*terms_it].RankingToString() 
                         << table_[i][*terms_it].MapToString() << std::endl;
                 ++terms_it;
             }
-            if (terms_it == terms_end || *terms_it > match[1].str())
+            if (terms_it == terms_end || *terms_it > TERM)
             {
                 me_file << line << std::endl;
                 continue;
@@ -577,19 +593,28 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
                 std::ostringstream oss;
                 std::ostringstream oss_freq;
                 
-                TermInfo& merged_term = table_[i][*terms_it];
+                TermInfo& merged_term = table_[i][*terms_it];//old
+                //auto IT = table_[i].find(*terms_it);//new
+                //if (IT == table_[i].end())//new
+                //    std::cout << "Term not found: " << *terms_it << std::endl;//new
+                //TermInfo& merged_term = IT->second;//new
+                //if (merged_term.doc_pos_map.empty()) {//new
+                //    std::cerr << "Empty doc_pos_map for term: " << *terms_it << std::endl;//new
+                //    continue;//new
+                //}//new
                 auto m_it = merged_term.doc_pos_map.begin();
                 auto m_end = merged_term.doc_pos_map.end();
                 
                 auto begin = std::sregex_iterator(line.begin(), line.end(), term_info_regex);
                 auto end = std::sregex_iterator();
                 std::smatch df_match_d;
-                
+
                 std::string tmp;
                 DocIdType line_doc_id;
                 bool skip_line_insert;
                 for (auto it = begin; it != end; ++it)
                 {	
+                    //std::cout << "111111111\n";//new
                     tmp = (*it)[0].str();
                     skip_line_insert = false;
 
@@ -631,6 +656,7 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
                             else
                                 break;
                         }
+                        //std::cout << "222222222\n";//new
 
                         if ( !skip_line_insert )
                         {
@@ -645,14 +671,16 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
                                 num_top_doc_ids_ 
                             );
                         }
+                        //std::cout << "3333333\n";//new
                     }
+                //std::cout << "44444444\n";//new
                 }
                 while (m_it != m_end)
                 {
                     oss << merged_term.MapEntryToString(m_it->first);
                     ++m_it;
                 }
-                
+                //std::cout << "555555555\n";//new
                 oss_freq << merged_term.RankingToString();
                 
                 me_file << oss_freq.str();
@@ -661,12 +689,18 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
                 me_file << std::endl;
                 
                 ++terms_it;
+                //std::cout << "66666666\n";//new
             }
+        //std::cout << "77777777\n";//new
                 
         }
-
+        else//new
+        {//neew
+            //std::cout << "qqqqqqqqq\n";//new
+        }//newe
+    //std::cout << "88888888\n";//new
     }
-    
+    //std::cout << "999999999\n";//new
     while (terms_it != terms_end)
     {
         me_file << *terms_it << ":" 
@@ -680,7 +714,7 @@ void AuxiliaryIndex::MergeAiWithDisk(size_t i) //REFACTORED TODO
     indexes_paths_[i].UpdateMainIndexPath();
 }
 
-AuxiliaryIndex::DocFreqEntry AuxiliaryIndex::ReadFromDiskIndexLog(const std::string& target_term) //REFACTORED TODO
+AuxiliaryIndex::DocFreqEntry AuxiliaryIndex::ReadDocFreqEntryFromDisk(const std::string& target_term) //REFACTORED TODO
 {
     size_t i = GetSegmentIndex(target_term);
     
@@ -719,8 +753,11 @@ AuxiliaryIndex::DocFreqEntry AuxiliaryIndex::ReadFromDiskIndexLog(const std::str
         
         auto start = file.tellg();
         std::getline(file, line);
-        if (std::regex_search(line, match, term_regex))
-            curr_term = match[1].str();
+        size_t POS = line.find(":");//new
+        if (POS != std::string::npos)//new
+            curr_term = line.substr(0,POS);//new
+        //if (std::regex_search(line, match, term_regex))
+        //    curr_term = match[1].str();
             
         if (target_term < curr_term)
             right = mid - 1;
@@ -729,6 +766,30 @@ AuxiliaryIndex::DocFreqEntry AuxiliaryIndex::ReadFromDiskIndexLog(const std::str
         else
         {
             DocFreqEntry top_entry;
+            
+            std::string line_truncated = "";
+
+            size_t left_square_bracket = line.find("[");//new
+            size_t right_square_bracket = line.find("]");//new
+            if (left_square_bracket != std::string::npos && right_square_bracket != std::string::npos)//new
+                line_truncated = line.substr(left_square_bracket+1,right_square_bracket - left_square_bracket - 1);//new
+            
+            top_entry.doc_id = static_cast<DocIdType>( std::stoul(line_truncated) );
+
+            std::string top_entry_substr = std::to_string(top_entry.doc_id) + "=";
+            size_t t = line.find(top_entry_substr);
+            if (t != std::string::npos)
+            {
+                t += top_entry_substr.size();
+                size_t freq = line.find(",", t);
+                //line.substr(t, freq);
+                top_entry.freq = static_cast<FreqType>( std::stoul(line.substr(t, freq)) );
+            }
+
+            return top_entry;
+
+
+            /*DocFreqEntry top_entry;
             top_entry.doc_id = std::stoul(match[2].str());
 
             std::regex top_entry_regex( std::to_string(top_entry.doc_id) + "=" + "(\\d+)" );
@@ -737,7 +798,7 @@ AuxiliaryIndex::DocFreqEntry AuxiliaryIndex::ReadFromDiskIndexLog(const std::str
             if (std::regex_search(line, freq_match, top_entry_regex))
                 top_entry.freq = static_cast<FreqType>( std::stoul(freq_match[1].str()) ); 
 
-            return top_entry;
+            return top_entry;*/
         }
             
     }
@@ -745,7 +806,7 @@ AuxiliaryIndex::DocFreqEntry AuxiliaryIndex::ReadFromDiskIndexLog(const std::str
     return DocFreqEntry();
 }
 
-void AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& target_term, TermsTable& phrases_disk_table) //REFACTORED TODO
+void AuxiliaryIndex::ReadTermInfoFromDisk(const std::string& target_term, TermsTable& phrases_disk_table) //REFACTORED TODO
 {
     if ( phrases_disk_table.find(target_term) != phrases_disk_table.end() )
         return;
@@ -786,8 +847,20 @@ void AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& target_term, Ter
         
         auto start = file.tellg(); //or mid
         std::getline(file, line);
-        if (std::regex_search(line, match, term_regex))
-            curr_term = match[1].str();
+        size_t POS = line.find(":");//new
+        if (POS != std::string::npos)//new
+            curr_term = line.substr(0,POS);//new
+        //if (std::regex_search(line, match, term_regex))old
+        //    curr_term = match[1].str();old
+
+        ///
+        //size_t POS = line.find(":");//new
+        //if (POS != std::string::npos)
+        //{
+        //    std::string TERM = line.substr(0,POS); 
+
+
+        ///
             
         if (target_term < curr_term)
             right = mid - 1;
@@ -795,7 +868,8 @@ void AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& target_term, Ter
             left = mid + 1;
         else
         {
-            std::string curr = match[3].str();
+            //old std::string curr = match[3].str();
+            std::string curr = line;//new
 
             std::regex doc_pos_regex("([\\d]+)=\\d+(,\\d+)+;");
             std::regex num_regex("[0-9]+");
