@@ -1,13 +1,14 @@
-#include "sheduler.hpp"
-//#include "BS_thread_pool.hpp"
-
-#include <chrono> //for thread to sleep
 #include <iostream>
-#include <thread>
-#include <regex>
-#include <string>
-#include <filesystem>
 #include <fstream>
+#include <thread>
+#include <algorithm> 
+
+#include "BS_thread_pool.hpp"
+
+#include "sheduler.hpp"
+#include "auxiliary_index.hpp"
+
+extern std::mutex print_mutex;
 
 Sheduler::Sheduler(const std::string data_path, AuxiliaryIndex* aux_idx, BS::priority_thread_pool* thread_pool, size_t sleep_duration)
 {
@@ -39,8 +40,10 @@ void Sheduler::MonitorData()
 
                 if ( !monitored_dirs_.count(curr_dir) )
                 {
-                    std::cout << "New directory " << curr_dir.string() << std::endl;
-
+                    {
+                        std::lock_guard<std::mutex> _(print_mutex);
+                        std::cout << "New directory " << curr_dir.string() << std::endl;
+                    }
                     monitored_dirs_.insert(curr_dir);
 
                     InspectDir(curr_dir.string());
@@ -105,6 +108,7 @@ void Sheduler::SplitFileInWords(const std::filesystem::path& file_path)
 
 	if (!file)
 	{
+        std::lock_guard<std::mutex> _(print_mutex);
 		std::cerr << "Error opening file to split: " << file_path.string() << '\n';
 		return;
 	}

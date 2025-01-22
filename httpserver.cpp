@@ -6,6 +6,8 @@
 #include <regex>
 #include <thread>
 #include <vector>
+#include <chrono> 
+#include <filesystem>
 
 #include <unistd.h>
 #include <sys/socket.h>
@@ -14,8 +16,8 @@
 
 #include "BS_thread_pool.hpp"
 
-#include "sheduler.cpp"
-#include "auxiliary_index.cpp"
+#include "sheduler.hpp"
+#include "auxiliary_index.hpp"
 
 #define PORT 8080
 #define MY_ADDR "192.168.0.100"
@@ -81,7 +83,7 @@ void HandleRequest(int& client_socket, AuxiliaryIndex& ai, Sheduler& sheduler)
         close(client_socket);
         return;
     }
-    else
+    else if (recv == 0)
     {
         std::lock_guard<std::mutex> _(print_mutex);
         std::cerr << "Error client closed connection" << std::endl;
@@ -200,6 +202,7 @@ repeat_data:
 
     std::thread t_s(&Sheduler::MonitorData, &sheduler);
 
+    //opening root page file
     std::ifstream file(HTML_ROOT);
     if (file) 
     {
@@ -213,8 +216,7 @@ repeat_data:
         return 1;
     }
     
-    //////////////////////
-
+    //creating server
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (-1 == server_socket) 
     {

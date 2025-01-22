@@ -3,30 +3,20 @@
 #include <fstream>
 #include <algorithm> 
 #include <cctype>
-#include <utility> //for swap()
-#include <thread>
-
+#include <utility> 
 #include <filesystem>
-
-#include <unordered_map>
-
-#include <cstdint> //for uint...
-
-#include <shared_mutex> //for class
-
-#include <functional> // For std::hash
+#include <unordered_set>
+#include <cstdint> 
+#include <shared_mutex> 
+#include <functional> 
 #include <stdexcept>
-#include <mutex>
-#include <chrono> //for thread to sleep
-
-#include <queue>
-
 #include <set>
-
-#include <unordered_set> //for Sheduler
+#include <memory>
+#include <mutex>
 
 #include "auxiliary_index.hpp"
 
+extern std::mutex print_mutex;
 
 std::string AuxiliaryIndex::TermInfo::RankingToString()
 {
@@ -113,8 +103,8 @@ void AuxiliaryIndex::TermInfo::UpdateRanking(const DocFreqEntry& new_entry, size
 
 AuxiliaryIndex::IndexPath::IndexPath(const std::string& main_index_path, const std::string& merge_index_path, std::unique_ptr<std::shared_mutex> mp)
 {
-    main = main_index;
-    merge = merge_index;
+    main = main_index_path;
+    merge = merge_index_path;
     mtx_ptr = std::move(mp);
 }
 void AuxiliaryIndex::IndexPath::UpdateMainIndexPath()
@@ -834,4 +824,3 @@ void AuxiliaryIndex::ReadTermInfoFromDiskLog(const std::string& target_term, Ter
         }
     }
 }
-

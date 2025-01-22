@@ -1,29 +1,6 @@
 #ifndef AUXILIARY_INDEX_H
 #define AUXILIARY_INDEX_H
 
-
-#include <iostream>
-#include <regex>
-#include <fstream>
-#include <algorithm> 
-#include <cctype>
-#include <utility> //for swap()
-#include <thread>
-
-#include <filesystem>
-
-#include <unordered_map>
-
-#include <cstdint> //for uint...
-
-#include <shared_mutex> //for class
-
-#include <functional> // For std::hash
-#include <stdexcept>
-#include <mutex>
-
-#include <set>
-
 class AuxiliaryIndex
 {
 private:
@@ -59,7 +36,7 @@ private:
 	size_t num_segments_;
 	std::vector<std::unique_ptr<std::shared_mutex>> segments_;
 	
-	size_t num_top_doc_ids_; //can be set in constuctor
+	size_t num_top_doc_ids_;
 	
 	size_t max_segment_size_;
 	
@@ -70,7 +47,7 @@ private:
 		std::string merge;
 		std::unique_ptr<std::shared_mutex> mtx_ptr;
 	public:
-		IndexPath(const std::string& ma, const std::string& me, std::unique_ptr<std::shared_mutex> mp);
+		IndexPath(const std::string& main_index_path, const std::string& merge_index_path, std::unique_ptr<std::shared_mutex> mp);
 		
 		void UpdateMainIndexPath();
 		std::string GetMainIndexPath();

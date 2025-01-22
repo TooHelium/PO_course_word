@@ -1,14 +1,16 @@
 #ifndef SHEDULER_H
 #define SHEDULER_H
 
-#include <chrono>
-#include <filesystem>
-#include <iostream>
 #include <string>
-#include <vector>
-#include <unordered_set>
 #include <regex>
+#include <unordered_set>
+#include <filesystem>
+#include <memory>
+#include <shared_mutex> 
 
+#include "BS_thread_pool.hpp" 
+
+#include "auxiliary_index.hpp"
 
 class Sheduler 
 {
